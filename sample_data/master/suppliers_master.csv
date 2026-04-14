@@ -1,0 +1,4 @@
+supplier_id,supplier_name,supplier_type,country,region_served,primary_port,risk_tier,contract_start_date,sla_on_time_target_pct,avg_lead_time_days,payment_terms_days,cold_chain_capability,backup_supplier_id,annual_spend_usd_2023,annual_spend_usd_2024,preferred_carrier,quality_certification,account_manager_name
+SUP001,SupplierA,Manufacturing Specialist,USA,"North|South","Port of Houston",Medium,2021-04-15,92.0,11,45,Yes,SUP002,4850000,5125000,FedEx Freight,"ISO 13485; FDA Registered",Olivia Carter
+SUP002,SupplierB,Transit Specialist,USA,"North|West","Port of Seattle",Medium,2020-09-01,95.0,8,30,No,SUP001,3980000,4210000,UPS Supply Chain,"ISO 9001; GDP Compliant",Daniel Brooks
+SUP003,SupplierC,Import & Port Logistics Specialist,Germany,"South|West","Port of Los Angeles",High,2022-01-10,88.0,14,60,Yes,SUP002,5360000,5480000,DHL Global Forwarding,"ISO 13485; CE Logistics Certified",Sophia Nguyen

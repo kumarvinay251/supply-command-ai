@@ -1,0 +1,101 @@
+shipment_id,shipment_date,expected_delivery_date,actual_delivery_date,supplier_id,product_id,location_id,region,product_category,quantity_units,shipment_value_usd,status,delay_days,delay_reason,delay_reason_category,inventory_level_at_dispatch,weather_condition,port_condition,customs_status,sla_breach,expedited_flag,expedited_cost_usd,risk_flag,ai_intervention_applied,root_cause_category,recommended_action,recovery_status
+SHP0001,2023-01-08,2023-01-16,2023-01-17,SUP002,PRD011,LOC002,North,Implants,289,376177.27,OnTime,1,,,Low,Clear,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0002,2023-01-11,2023-01-25,2023-02-02,SUP003,PRD015,LOC004,South,PPE,520,16058.82,Delayed,8,Shipping paperwork mismatch required correction,Documentation_Error,Medium,Snow,Congested,Cleared,Yes,No,0.0,High,No,Documentation / master data error,Correct shipment documents and reinforce shipper checklist,Resolved
+SHP0003,2023-01-10,2023-01-21,2023-01-20,SUP001,PRD001,LOC001,North,Surgical Instruments,556,225702.42,OnTime,0,,,Medium,Rain,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0004,2023-01-22,2023-02-02,2023-02-02,SUP001,PRD005,LOC003,South,Diagnostic Equipment,194,172014.11,OnTime,0,,,High,Storm,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0005,2023-01-12,2023-01-23,2023-02-02,SUP001,PRD010,LOC004,South,Implants,363,257125.01,Delayed,10,Shipping paperwork mismatch required correction,Documentation_Error,High,Clear,Clear,Cleared,Yes,No,0.0,Medium,No,Documentation / master data error,Correct shipment documents and reinforce shipper checklist,Resolved
+SHP0006,2023-02-14,2023-02-28,2023-03-04,SUP003,PRD003,LOC006,West,Surgical Instruments,86,37389.3,Delayed,4,Weather disruption impacted transit route,Weather,High,Storm,Clear,Cleared,Yes,No,0.0,High,No,Weather / route disruption,Shift to alternate carrier and revise ETA proactively,Resolved
+SHP0007,2023-02-12,2023-02-20,2023-02-20,SUP002,PRD002,LOC005,West,Surgical Instruments,709,141104.66,OnTime,0,,,High,Fog,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0008,2023-02-23,2023-03-03,2023-03-02,SUP002,PRD008,LOC001,North,Consumables,844,17255.74,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0009,2023-02-07,2023-02-18,2023-02-17,SUP001,PRD005,LOC002,North,Diagnostic Equipment,1048,2176724.24,OnTime,0,,,Medium,Clear,Congested,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0010,2023-02-05,2023-02-16,2023-02-15,SUP001,PRD004,LOC002,North,Diagnostic Equipment,650,2054722.85,OnTime,0,,,Low,Rain,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0011,2023-03-02,2023-03-10,2023-03-16,SUP002,PRD014,LOC002,North,PPE,84,1631.38,Delayed,6,Production slot miss at supplier site,Supplier_Dispatch,High,Fog,Clear,Cleared,Yes,No,0.0,Low,No,Supplier capacity / dispatch,Expedite dispatch and activate backup production slot,Resolved
+SHP0012,2023-03-17,2023-03-28,,SUP001,PRD003,LOC003,South,Surgical Instruments,460,65601.54,In_Transit,0,,,Medium,Rain,Clear,Cleared,No,No,0.0,Medium,No,Open shipment,Monitor milestone events and update ETA,In_Progress
+SHP0013,2023-03-13,2023-03-24,2023-03-31,SUP001,PRD004,LOC004,South,Diagnostic Equipment,694,2295994.55,Delayed,7,Production slot miss at supplier site,Supplier_Dispatch,Medium,Clear,Clear,Cleared,Yes,Yes,86989.13,Medium,No,Supplier capacity / dispatch,Expedite dispatch and activate backup production slot,In_Progress
+SHP0014,2023-03-22,2023-04-05,2023-04-11,SUP003,PRD015,LOC004,South,PPE,355,5540.63,Delayed,6,,Customs_Hold,Low,Clear,Clear,Hold,Yes,Yes,283.56,High,No,Customs / compliance delay,Escalate broker review and submit corrected compliance documents,In_Progress
+SHP0015,2023-03-18,2023-03-26,2023-03-25,SUP002,PRD005,LOC006,West,Diagnostic Equipment,99,331812.12,OnTime,0,,,Medium,Clear,Clear,Pending,No,No,0.0,Low,No,,,Resolved
+SHP0016,2023-04-06,2023-04-18,2023-04-18,SUP001,PRD003,LOC003,South,Surgical Instruments,130,23294.57,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0017,2023-04-08,2023-04-22,2023-04-28,SUP003,PRD008,LOC006,West,Consumables,475,8608.87,Delayed,6,Production slot miss at supplier site,Supplier_Dispatch,Medium,Rain,Congested,Cleared,Yes,No,0.0,High,No,Supplier capacity / dispatch,Expedite dispatch and activate backup production slot,Escalated
+SHP0018,2023-04-13,2023-04-27,2023-04-26,SUP003,PRD009,LOC005,West,Consumables,469,7070.69,OnTime,0,,,Medium,Snow,Clear,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0019,2023-04-17,2023-05-01,2023-05-03,SUP003,PRD015,LOC004,South,PPE,916,23773.03,Delayed,2,Port congestion delayed unloading and drayage,Port_Congestion,Medium,Snow,Clear,Cleared,No,No,0.0,High,No,Port / terminal disruption,Reroute via alternate port and pre-book drayage capacity,Resolved
+SHP0020,2023-04-24,2023-05-02,2023-05-11,SUP002,PRD008,LOC002,North,Consumables,253,10845.28,Delayed,9,Production slot miss at supplier site,Supplier_Dispatch,Low,Clear,Congested,Cleared,Yes,No,0.0,Low,No,Supplier capacity / dispatch,Expedite dispatch and activate backup production slot,In_Progress
+SHP0021,2023-05-21,2023-05-29,2023-05-29,SUP002,PRD005,LOC005,West,Diagnostic Equipment,298,414479.58,OnTime,0,,,Medium,Storm,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0022,2023-05-18,2023-06-01,2023-05-31,SUP003,PRD012,LOC006,West,Implants,405,392750.98,OnTime,0,,,High,Clear,Clear,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0023,2023-05-08,2023-05-22,2023-05-21,SUP003,PRD004,LOC003,South,Diagnostic Equipment,392,381579.82,OnTime,0,,,Low,Clear,Congested,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0024,2023-05-14,2023-05-26,2023-05-25,SUP001,PRD005,LOC004,South,Diagnostic Equipment,638,560398.15,OnTime,0,,,Low,Clear,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0025,2023-06-06,2023-06-18,2023-06-25,SUP001,PRD003,LOC004,South,Surgical Instruments,750,142385.92,Delayed,7,Documentation review triggered customs hold,Customs_Hold,High,Clear,Clear,Cleared,Yes,No,0.0,Medium,No,Customs / compliance delay,,Resolved
+SHP0026,2023-06-05,2023-06-18,2023-06-19,SUP001,PRD003,LOC001,North,Surgical Instruments,526,143840.6,OnTime,1,,,Medium,,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0027,2023-06-03,2023-06-17,2023-06-17,SUP003,PRD015,LOC005,West,PPE,577,6501.92,OnTime,0,,,High,Snow,Clear,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0028,2023-06-12,2023-06-20,2023-06-21,SUP002,PRD002,LOC006,West,Surgical Instruments,1021,360833.5,OnTime,1,,,High,Clear,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0029,2023-07-19,2023-08-01,2023-08-01,SUP001,PRD004,LOC004,South,Diagnostic Equipment,1092,1409736.63,OnTime,0,,,High,Rain,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0030,2023-07-15,2023-07-29,2023-07-29,SUP003,PRD015,LOC006,West,PPE,270,4850.16,OnTime,0,,,Medium,Clear,Congested,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0031,2023-07-24,2023-08-05,2023-08-09,SUP001,PRD006,LOC001,North,Diagnostic Equipment,1071,2561708.46,Delayed,4,Weather disruption impacted transit route,Weather,High,Clear,Clear,Cleared,Yes,No,0.0,Medium,No,Weather / route disruption,Shift to alternate carrier and revise ETA proactively,Escalated
+SHP0032,2023-07-16,2023-07-24,2023-07-24,SUP002,PRD008,LOC002,North,Consumables,777,44559.29,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0033,2023-08-15,2023-08-28,2023-08-31,SUP001,PRD004,LOC004,South,Diagnostic Equipment,958,2372749.27,Delayed,3,,Supplier_Dispatch,Low,Clear,Clear,Cleared,Yes,No,0.0,Medium,No,Supplier capacity / dispatch,Expedite dispatch and activate backup production slot,Resolved
+SHP0034,2023-08-09,2023-08-21,2023-08-21,SUP001,PRD002,LOC003,South,Surgical Instruments,1195,232053.61,OnTime,0,,,High,Rain,Congested,Pending,No,No,0.0,Medium,No,,,Resolved
+SHP0035,2023-08-20,2023-09-03,,SUP003,PRD009,LOC005,West,Consumables,964,15582.02,Cancelled,0,Order cancelled prior to dispatch completion,Supplier_Dispatch,High,Rain,Clear,Hold,Yes,No,0.0,High,No,Order / fulfillment cancellation,Rebook order and validate dispatch readiness,Escalated
+SHP0036,2023-08-19,2023-08-27,2023-08-27,SUP002,PRD006,LOC005,West,Diagnostic Equipment,1087,2249033.51,OnTime,0,,,Low,Clear,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0037,2023-09-17,2023-09-29,2023-09-29,SUP001,PRD002,LOC004,South,Surgical Instruments,1191,324490.56,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0038,2023-09-10,2023-09-24,2023-09-24,SUP003,PRD015,LOC003,South,PPE,915,10222.0,OnTime,0,,,High,Clear,Clear,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0039,2023-09-20,2023-09-28,2023-09-29,SUP002,PRD007,LOC001,North,Consumables,359,18147.55,OnTime,1,,,Medium,Storm,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0040,2023-09-18,2023-09-26,2023-09-26,SUP002,PRD006,LOC006,West,Diagnostic Equipment,852,1421816.62,OnTime,0,,,Low,Snow,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0041,2023-10-17,2023-10-31,2023-10-31,SUP003,PRD003,LOC005,West,Surgical Instruments,759,308913.84,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0042,2023-10-22,2023-10-30,2023-10-29,SUP002,PRD014,LOC002,North,PPE,1079,35461.43,OnTime,0,,,High,Snow,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0043,2023-10-12,2023-10-23,2023-10-23,SUP001,PRD005,LOC002,North,Diagnostic Equipment,580,1350243.34,OnTime,0,,,High,Rain,Clear,Pending,No,No,0.0,Medium,No,,,Resolved
+SHP0044,2023-10-03,2023-10-17,2023-10-17,SUP003,PRD008,LOC005,West,Consumables,787,45875.26,OnTime,0,,,Medium,Fog,Congested,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0045,2023-11-19,2023-11-30,2023-11-30,SUP001,PRD005,LOC003,South,Diagnostic Equipment,180,506153.67,OnTime,0,,,Low,Snow,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0046,2023-11-10,2023-11-24,2023-11-25,SUP003,PRD015,LOC003,South,PPE,148,4170.93,OnTime,1,,,Low,Clear,Clear,Pending,No,No,0.0,High,No,,,Resolved
+SHP0047,2023-11-04,2023-11-18,2023-11-17,SUP003,PRD008,LOC006,West,Consumables,234,12567.28,OnTime,0,,,High,Snow,Clear,Hold,No,No,0.0,High,No,,,Resolved
+SHP0048,2023-11-21,2023-12-05,2023-12-05,SUP003,PRD012,LOC006,West,Implants,301,689898.43,OnTime,0,,,Medium,Rain,Clear,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0049,2023-12-08,2023-12-19,2023-12-19,SUP001,PRD002,LOC003,South,Surgical Instruments,357,88626.37,OnTime,0,,,Medium,Rain,Congested,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0050,2023-12-08,2023-12-22,2023-12-21,SUP003,PRD009,LOC004,South,Consumables,283,15728.1,OnTime,0,,,Low,Fog,Congested,Hold,No,No,0.0,High,No,,,Resolved
+SHP0051,2023-12-19,2023-12-30,2024-01-03,SUP001,PRD004,LOC003,South,Diagnostic Equipment,504,1509602.5,Delayed,4,Documentation review triggered customs hold,Customs_Hold,Medium,Clear,Closed,Pending,Yes,Yes,72328.25,Medium,No,Customs / compliance delay,,In_Progress
+SHP0052,2023-12-24,2024-01-04,,SUP001,PRD010,LOC001,North,Implants,998,1454378.92,In_Transit,0,,,Low,Snow,Congested,Cleared,No,No,0.0,Medium,No,Open shipment,Monitor milestone events and update ETA,In_Progress
+SHP0053,2024-01-16,2024-01-24,2024-01-25,SUP002,PRD007,LOC005,West,Consumables,988,41864.9,OnTime,1,,,Medium,Clear,Clear,Pending,No,No,0.0,Low,No,,,Resolved
+SHP0054,2024-01-14,2024-01-28,2024-01-28,SUP003,PRD015,LOC003,South,PPE,547,8992.03,OnTime,0,,,Medium,Clear,Closed,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0055,2024-01-19,2024-01-30,2024-01-29,SUP001,PRD003,LOC003,South,Surgical Instruments,755,257533.8,OnTime,0,,,High,Clear,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0056,2024-01-04,2024-01-15,2024-01-15,SUP001,PRD006,LOC002,North,Diagnostic Equipment,543,1673481.98,OnTime,0,,,Medium,,Congested,Hold,No,No,0.0,Medium,No,,,Resolved
+SHP0057,2024-02-05,2024-02-19,2024-02-19,SUP003,PRD003,LOC005,West,Surgical Instruments,900,128666.87,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0058,2024-02-09,2024-02-20,2024-02-20,SUP001,PRD001,LOC001,North,Surgical Instruments,948,265694.41,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0059,2024-02-09,2024-02-20,2024-02-22,SUP001,PRD004,LOC003,South,Diagnostic Equipment,325,915504.89,Delayed,2,Carrier vehicle breakdown delayed line-haul,Transport_Breakdown,Medium,Storm,Congested,Cleared,No,Yes,41795.57,Medium,No,Transport / carrier breakdown,Deploy secondary carrier and prioritize critical SKUs,Resolved
+SHP0060,2024-02-06,2024-02-17,2024-02-17,SUP001,PRD001,LOC004,South,Surgical Instruments,1022,403249.06,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0061,2024-03-12,2024-03-20,2024-03-21,SUP002,PRD014,LOC002,North,PPE,382,10896.86,OnTime,1,,,Medium,Clear,Congested,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0062,2024-03-05,2024-03-13,2024-03-12,SUP002,PRD014,LOC006,West,PPE,1040,22566.02,OnTime,0,,,Medium,Clear,Clear,Hold,No,No,0.0,Low,No,,,Resolved
+SHP0063,2024-03-15,2024-03-23,2024-03-23,SUP002,PRD007,LOC005,West,Consumables,465,10131.77,OnTime,0,,,High,,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0064,2024-03-10,2024-03-18,2024-03-19,SUP002,PRD006,LOC002,North,Diagnostic Equipment,772,726750.68,OnTime,1,,,Medium,Clear,Clear,Hold,No,No,0.0,Low,No,,,Resolved
+SHP0065,2024-04-05,2024-04-17,2024-04-18,SUP001,PRD005,LOC004,South,Diagnostic Equipment,851,1435540.58,OnTime,1,,,High,Storm,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0066,2024-04-05,2024-04-17,,SUP001,PRD004,LOC003,South,Diagnostic Equipment,287,647868.36,In_Transit,0,,,High,Rain,Clear,Cleared,No,No,0.0,Medium,No,Open shipment,Monitor milestone events and update ETA,In_Progress
+SHP0067,2024-04-12,2024-04-26,2024-04-26,SUP003,PRD003,LOC006,West,Surgical Instruments,566,249019.76,OnTime,0,,,Low,Fog,Congested,Pending,No,No,0.0,High,No,,,Resolved
+SHP0068,2024-04-17,2024-04-25,2024-04-24,SUP002,PRD014,LOC006,West,PPE,411,10403.16,OnTime,0,,,High,Clear,Clear,Hold,No,No,0.0,Low,No,,,Resolved
+SHP0069,2024-05-08,2024-05-22,2024-05-22,SUP003,PRD009,LOC003,South,Consumables,795,26108.14,OnTime,0,,,Low,Clear,Clear,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0070,2024-05-15,2024-05-29,2024-05-29,SUP003,PRD015,LOC004,South,PPE,242,5914.42,OnTime,0,,,Medium,Snow,Clear,Cleared,No,No,0.0,High,No,,,Resolved
+SHP0071,2024-05-23,2024-06-04,2024-06-05,SUP001,PRD001,LOC003,South,Surgical Instruments,83,26799.63,OnTime,1,,,High,Clear,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0072,2024-05-12,2024-05-20,2024-05-20,SUP002,PRD006,LOC005,West,Diagnostic Equipment,786,2023306.96,OnTime,0,,,Low,Clear,Clear,Cleared,No,No,0.0,Low,No,,,Resolved
+SHP0073,2024-06-07,2024-06-19,2024-06-18,SUP001,PRD001,LOC004,South,Surgical Instruments,165,36984.19,OnTime,0,,,Low,Rain,Clear,Hold,No,No,0.0,Medium,No,,,Resolved
+SHP0074,2024-06-13,2024-06-21,2024-06-22,SUP002,PRD011,LOC006,West,Implants,462,686820.34,OnTime,1,,,Medium,Clear,Clear,Hold,No,No,0.0,Low,No,,,Resolved
+SHP0075,2024-06-23,2024-07-06,2024-07-07,SUP001,PRD010,LOC003,South,Implants,166,220180.23,OnTime,1,,,High,Clear,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0076,2024-06-03,2024-06-15,2024-06-15,SUP001,PRD001,LOC003,South,Surgical Instruments,830,198793.04,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,Medium,No,,,Resolved
+SHP0077,2024-07-18,2024-07-30,2024-07-30,SUP001,PRD013,LOC002,North,PPE,613,21432.31,OnTime,0,,,Low,Clear,Clear,Cleared,No,No,0.0,Medium,Yes,,,Resolved
+SHP0078,2024-07-18,2024-08-01,2024-08-01,SUP003,PRD015,LOC005,West,PPE,694,20424.28,OnTime,0,,,Medium,,Clear,Cleared,No,No,0.0,High,Yes,,,Resolved
+SHP0079,2024-07-03,2024-07-17,2024-07-18,SUP003,PRD012,LOC003,South,Implants,1060,678533.94,OnTime,1,,,Medium,Clear,Clear,Cleared,No,No,0.0,High,Yes,,,Resolved
+SHP0080,2024-07-17,2024-07-25,2024-07-25,SUP002,PRD014,LOC001,North,PPE,417,9178.27,OnTime,0,,,Medium,Clear,Clear,Pending,No,No,0.0,Low,Yes,,,Resolved
+SHP0081,2024-08-06,2024-08-14,2024-08-14,SUP002,PRD008,LOC001,North,Consumables,771,40196.57,OnTime,0,,,Medium,Rain,Clear,Hold,No,No,0.0,Low,Yes,,,Resolved
+SHP0082,2024-08-22,2024-08-30,2024-08-30,SUP002,PRD007,LOC005,West,Consumables,1008,35060.51,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,Low,Yes,,,Resolved
+SHP0083,2024-08-04,2024-08-12,2024-08-12,SUP002,PRD005,LOC006,West,Diagnostic Equipment,587,549804.33,OnTime,0,,,High,Storm,Congested,Pending,No,No,0.0,Low,Yes,,,Resolved
+SHP0084,2024-08-03,2024-08-11,2024-08-10,SUP002,PRD007,LOC005,West,Consumables,1115,45994.29,OnTime,0,,,Medium,Storm,Clear,Cleared,No,No,0.0,Low,Yes,,,Resolved
+SHP0085,2024-09-13,2024-09-27,,SUP003,PRD008,LOC005,West,Consumables,478,15480.36,In_Transit,0,,,High,Rain,Clear,Cleared,No,No,0.0,High,Yes,Open shipment,Monitor milestone events and update ETA,In_Progress
+SHP0086,2024-09-07,2024-09-15,2024-09-16,SUP002,PRD014,LOC005,West,PPE,902,18753.57,OnTime,1,,,Medium,Rain,Clear,Cleared,No,No,0.0,Low,Yes,,,Resolved
+SHP0087,2024-09-23,2024-10-07,2024-10-07,SUP003,PRD012,LOC006,West,Implants,1052,2484620.18,OnTime,0,,,High,Rain,Clear,Cleared,No,No,0.0,High,Yes,,,Resolved
+SHP0088,2024-09-19,2024-09-27,2024-09-27,SUP002,PRD011,LOC001,North,Implants,1153,900232.24,OnTime,0,,,Low,Fog,Clear,Cleared,No,No,0.0,Low,Yes,,,Resolved
+SHP0089,2024-10-23,2024-10-31,2024-10-31,SUP002,PRD014,LOC005,West,PPE,504,17050.58,OnTime,0,,,Medium,Clear,Clear,Cleared,No,No,0.0,Low,Yes,,,Resolved
+SHP0090,2024-10-23,2024-10-31,2024-10-31,SUP002,PRD006,LOC002,North,Diagnostic Equipment,1081,1882851.82,OnTime,0,,,Low,Rain,Clear,Pending,No,No,0.0,Low,Yes,,,Resolved
+SHP0091,2024-10-21,2024-11-01,2024-11-02,SUP001,PRD006,LOC002,North,Diagnostic Equipment,1061,3220633.25,OnTime,1,,,Low,Snow,Clear,Cleared,No,No,0.0,Medium,Yes,,,Resolved
+SHP0092,2024-10-01,2024-10-12,2024-10-11,SUP001,PRD002,LOC003,South,Surgical Instruments,403,102474.62,OnTime,0,,,High,Clear,Clear,Pending,No,No,0.0,Medium,Yes,,,Resolved
+SHP0093,2024-11-06,2024-11-20,2024-11-19,SUP003,PRD004,LOC004,South,Diagnostic Equipment,154,288270.34,OnTime,0,,,High,Storm,Clear,Cleared,No,No,0.0,High,Yes,,,Resolved
+SHP0094,2024-11-09,2024-11-17,2024-11-18,SUP002,PRD005,LOC006,West,Diagnostic Equipment,310,859946.8,OnTime,1,,,Medium,Clear,Clear,Cleared,No,No,0.0,Low,Yes,,,Resolved
+SHP0095,2024-11-06,2024-11-14,2024-11-14,SUP002,PRD007,LOC001,North,Consumables,1057,28259.25,OnTime,0,,,High,Clear,Congested,Cleared,No,No,0.0,Low,Yes,,,Resolved
+SHP0096,2024-11-21,2024-12-02,2024-12-03,SUP001,PRD005,LOC003,South,Diagnostic Equipment,684,955064.38,OnTime,1,,,High,Clear,Clear,Pending,No,No,0.0,Medium,Yes,,,Resolved
+SHP0097,2024-12-17,2024-12-31,2024-12-31,SUP003,PRD012,LOC004,South,Implants,239,529501.51,OnTime,0,,,Medium,Clear,Congested,Cleared,No,No,0.0,High,Yes,,,Resolved
+SHP0098,2024-12-17,2024-12-25,2024-12-24,SUP002,PRD007,LOC001,North,Consumables,198,5715.79,OnTime,0,,,Low,Clear,Clear,Cleared,No,No,0.0,Low,Yes,,,Resolved
+SHP0099,2024-12-14,2024-12-28,2025-01-09,SUP003,PRD003,LOC006,West,Surgical Instruments,357,133062.16,Delayed,12,Weather disruption impacted transit route,Weather,Medium,Storm,Congested,Cleared,Yes,No,0.0,High,Yes,Weather / route disruption,Shift to alternate carrier and revise ETA proactively,Resolved
+SHP0100,2024-12-01,2024-12-09,2024-12-08,SUP002,PRD011,LOC001,North,Implants,691,843452.07,OnTime,0,,,Medium,,Clear,Hold,No,No,0.0,Low,Yes,,,Resolved
