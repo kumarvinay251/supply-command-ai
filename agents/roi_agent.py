@@ -1207,3 +1207,234 @@ def get_recommendation(
         risk_level,
         "Review with supply chain team and assess impact."
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SECTION 7 — WHAT-IF SIMULATION
+#  Pure Python math — no LLM, no new DB schema, no agents.
+#
+#  WHY a separate function and not inside run()?
+#    Simulation is a distinct computation mode: it reads current DB state,
+#    applies a user-supplied parameter change, and projects the outcome.
+#    It does not follow the same findings → ROI calculation path as run().
+#    Keeping it separate makes it testable in isolation.
+#
+#  WHY direct sqlite3 instead of going through db_agent?
+#    db_agent dispatches via SQL template keys. simulate_whatif() needs a
+#    JOIN across suppliers_master + shipments that has no existing template.
+#    A one-shot sqlite3 query is simpler and more transparent here.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def simulate_whatif(
+    entity:     str,
+    metric:     str = "delay_rate",
+    target_value: float = None,
+    db_path:    str = "database/supply_chain.db",
+) -> dict:
+    """
+    Simulate the financial impact of improving a supplier's delay rate.
+
+    Args:
+        entity:       Supplier ID (e.g. "SUP003"). None = fleet-wide.
+        metric:       Metric to improve. Only "delay_rate" supported.
+        target_value: Target delay rate in percent (e.g. 10.0 = 10%).
+                      If None, defaults to 50% improvement over current rate.
+        db_path:      Path to the SQLite database file.
+
+    Returns:
+        On success:
+            {
+                "entity":                    str,
+                "supplier_name":             str,
+                "current_value":             str,   ← "19.44%"
+                "target_value":              str,   ← "10.00%"
+                "current_delayed_shipments": int,
+                "simulated_delayed_shipments": int,
+                "shipments_saved":           int,
+                "current_expedited_cost":    str,   ← "$45,230"
+                "estimated_cost_saving":     str,   ← "$21,500"
+                "annual_saving_estimate":    str,   ← "$258,000"
+                "improvement_pct":           str,   ← "48.6%"
+                "annual_spend":              str,   ← "$1,200,000"
+                "confidence":                str,   ← "High"
+                "source":                    str,
+            }
+        On error:
+            {"error": str}
+    """
+    import sqlite3
+    import os
+
+    # Resolve db_path relative to project root when running from any CWD
+    if not os.path.isabs(db_path):
+        _root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..")
+        )
+        db_path = os.path.join(_root, db_path)
+
+    if not os.path.exists(db_path):
+        return {"error": f"Database not found at: {db_path}"}
+
+    if metric != "delay_rate":
+        return {"error": f"Only 'delay_rate' is currently supported. Got: '{metric}'"}
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur  = conn.cursor()
+
+        if entity:
+            cur.execute("""
+                SELECT
+                    s.supplier_id,
+                    s.supplier_name,
+                    COALESCE(s.annual_spend_usd_2024, 0)           AS annual_spend,
+                    COUNT(sh.shipment_id)                          AS total_shipments,
+                    SUM(CASE WHEN sh.status = 'Delayed' THEN 1 ELSE 0 END)
+                                                                   AS delayed_shipments,
+                    ROUND(
+                        100.0 * SUM(CASE WHEN sh.status = 'Delayed' THEN 1 ELSE 0 END)
+                        / NULLIF(COUNT(sh.shipment_id), 0),
+                        2
+                    )                                              AS current_delay_rate,
+                    COALESCE(SUM(sh.expedited_cost_usd), 0)        AS total_expedited_cost
+                FROM suppliers_master s
+                JOIN shipments sh ON s.supplier_id = sh.supplier_id
+                WHERE s.supplier_id = ?
+                GROUP BY s.supplier_id
+            """, (entity,))
+        else:
+            # Fleet-wide simulation
+            cur.execute("""
+                SELECT
+                    'FLEET'                                        AS supplier_id,
+                    'All Suppliers (Fleet)'                        AS supplier_name,
+                    COALESCE(SUM(s.annual_spend_usd_2024), 0)     AS annual_spend,
+                    COUNT(sh.shipment_id)                         AS total_shipments,
+                    SUM(CASE WHEN sh.status = 'Delayed' THEN 1 ELSE 0 END)
+                                                                  AS delayed_shipments,
+                    ROUND(
+                        100.0 * SUM(CASE WHEN sh.status = 'Delayed' THEN 1 ELSE 0 END)
+                        / NULLIF(COUNT(sh.shipment_id), 0),
+                        2
+                    )                                             AS current_delay_rate,
+                    COALESCE(SUM(sh.expedited_cost_usd), 0)       AS total_expedited_cost
+                FROM suppliers_master s
+                JOIN shipments sh ON s.supplier_id = sh.supplier_id
+            """)
+
+        row = cur.fetchone()
+
+        if not row or row["total_shipments"] == 0:
+            conn.close()
+            _who = entity if entity else "the fleet"
+            return {"error": f"No shipment data found for {_who}."}
+
+        # ── Fleet-level expedited cost from financial_impact ──────────────────
+        # WHY financial_impact instead of shipments.expedited_cost_usd?
+        #   Some suppliers (e.g. SUP003) have near-zero expedited_cost_usd in
+        #   the shipments table — costs are recorded at fleet level in
+        #   financial_impact.expedited_ship_usd, which is the audited source of
+        #   truth. We apportion to each supplier by their share of fleet delayed
+        #   shipments, which is a defensible proxy for who drove the cost.
+        cur.execute("""
+            SELECT SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END) AS fleet_delayed
+            FROM shipments
+        """)
+        fleet_row     = cur.fetchone()
+        fleet_delayed = fleet_row["fleet_delayed"] or 1
+
+        cur.execute("""
+            SELECT SUM(expedited_ship_usd) AS total_expedited
+            FROM financial_impact
+        """)
+        fin_row         = cur.fetchone()
+        fleet_expedited = float(fin_row["total_expedited"] or 0)
+
+        conn.close()
+
+        supplier_id   = row["supplier_id"]
+        supplier_name = row["supplier_name"]
+        total_ship    = int(row["total_shipments"])
+        delayed_ship  = int(row["delayed_shipments"])
+        current_rate  = float(row["current_delay_rate"] or 0.0)
+        annual_spend  = float(row["annual_spend"] or 0.0)
+
+        # Apportion fleet expedited cost by this supplier's share of delayed shipments
+        supplier_share     = delayed_ship / fleet_delayed
+        supplier_expedited = fleet_expedited * supplier_share
+
+        # ── Apply target ──────────────────────────────────────────────────────
+        # If no target supplied, default to 50% improvement
+        if target_value is None:
+            target_rate = round(current_rate * 0.5, 2)
+        else:
+            target_rate = float(target_value)
+
+        # Guard: target must be less than current rate to be an improvement
+        if target_rate >= current_rate:
+            return {
+                "error": (
+                    f"Target delay rate ({target_rate:.1f}%) is not better than "
+                    f"current rate ({current_rate:.1f}%). "
+                    "Please supply a lower target."
+                )
+            }
+
+        # ── Project simulated shipments ───────────────────────────────────────
+        simulated_delayed = round(total_ship * target_rate / 100)
+        shipments_saved   = delayed_ship - simulated_delayed
+
+        # ── Estimate cost saving (fleet-apportioned) ──────────────────────────
+        # WHY apportion from financial_impact instead of shipments?
+        #   expedited_cost_usd in shipments is near-zero for some suppliers
+        #   (e.g. SUP003) because costs are recorded fleet-wide in
+        #   financial_impact.expedited_ship_usd. Apportioning by each
+        #   supplier's share of delayed shipments gives a fair per-supplier
+        #   baseline and makes the saving estimate meaningful.
+        #
+        # improvement_ratio: fraction of delay rate eliminated (0.0–1.0)
+        # simulated_expedited_saving: supplier's apportioned cost × reduction %
+        # annual_saving_estimate: 3× the dataset saving (dataset ≈ 4 months)
+        improvement_ratio          = (
+            (current_rate - target_rate) / current_rate
+            if current_rate > 0 else 0.0
+        )
+        simulated_expedited_saving = supplier_expedited * improvement_ratio
+        annual_saving_estimate     = simulated_expedited_saving * 3
+
+        # ── Improvement percentage ────────────────────────────────────────────
+        if current_rate > 0:
+            improvement_pct = (current_rate - target_rate) / current_rate * 100
+        else:
+            improvement_pct = 0.0
+
+        # ── Confidence band ───────────────────────────────────────────────────
+        # High if 30+ shipments, Medium if 10–29, Low otherwise
+        confidence = (
+            "High"   if total_ship >= 30
+            else "Medium" if total_ship >= 10
+            else "Low"
+        )
+
+        return {
+            "entity":                      supplier_id,
+            "supplier_name":               supplier_name,
+            "current_value":               f"{current_rate:.2f}%",
+            "target_value":                f"{target_rate:.2f}%",
+            "current_delayed_shipments":   delayed_ship,
+            "simulated_delayed_shipments": simulated_delayed,
+            "shipments_saved":             shipments_saved,
+            "current_expedited_cost":      f"${supplier_expedited:,.0f}",
+            "estimated_cost_saving":       f"${simulated_expedited_saving:,.0f}",
+            "annual_saving_estimate":      f"${annual_saving_estimate:,.0f}",
+            "improvement_pct":             f"{improvement_pct:.1f}%",
+            "annual_spend":                format_currency(annual_spend),
+            "total_shipments":             total_ship,
+            "confidence":                  confidence,
+            "source":                      "What-If Simulation · DB-grounded",
+        }
+
+    except Exception as exc:
+        log.error(f"simulate_whatif | ERROR | {exc}")
+        return {"error": str(exc)}

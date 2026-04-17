@@ -146,6 +146,58 @@ PERSONAS: dict[str, dict] = {
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  SECTION 1b — WHAT-IF OUTPUT FORMATTER
+#  Pure Python — formats a simulate_whatif() result dict into a structured
+#  text block for display in the chat UI.
+#
+#  WHY here and not in roi_agent.py?
+#    roi_agent.py handles calculations. Formatting final user-facing text is
+#    the executive agent's responsibility (it owns the output layer).
+#    This also keeps all UI-facing string assembly in one place.
+#
+#  WHY no LLM call for WHATIF output?
+#    The simulation result is already a structured dict of verified numbers.
+#    A simple template renders it perfectly. An LLM would add zero value
+#    and risk paraphrasing numbers incorrectly.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def format_whatif_output(sim: dict) -> str:
+    """
+    Format a simulate_whatif() result dict into a readable text block.
+
+    Args:
+        sim: Return value from roi_agent.simulate_whatif().
+
+    Returns:
+        Formatted multi-line string for display in the chat UI.
+        If sim contains an "error" key, returns a one-line error message.
+    """
+    if "error" in sim:
+        return f"⚠️ Simulation error: {sim['error']}"
+
+    entity_label = (
+        f"{sim['supplier_name']} ({sim['entity']})"
+        if sim.get("entity") != "FLEET"
+        else sim.get("supplier_name", "Fleet")
+    )
+
+    return (
+        f"📊 **What-If Simulation — {entity_label}**\n\n"
+        f"**Current State**\n"
+        f"  • Delay rate:             {sim['current_value']}\n"
+        f"  • Delayed shipments:      {sim['current_delayed_shipments']} of {sim['total_shipments']}\n"
+        f"  • Expedited cost (actual):{sim['current_expedited_cost']}\n\n"
+        f"**Simulated State (target: {sim['target_value']})**\n"
+        f"  • Delayed shipments:      {sim['simulated_delayed_shipments']} (−{sim['shipments_saved']} shipments)\n"
+        f"  • Estimated cost saving:  {sim['estimated_cost_saving']}\n"
+        f"  • Annual projection:      {sim['annual_saving_estimate']}\n\n"
+        f"**Improvement:** {sim['improvement_pct']} reduction in delay rate\n"
+        f"**Annual Spend at Risk:** {sim['annual_spend']}\n\n"
+        f"_Confidence: {sim['confidence']} · Source: {sim['source']}_"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  SECTION 2 — PROMPT BUILDER
 #  Pure Python — assembles the LLM system + user prompt from verified findings.
 #  WHY assemble in code rather than a template file?

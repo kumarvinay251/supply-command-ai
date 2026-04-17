@@ -468,6 +468,66 @@ def execute_step_node(state: AgentState) -> dict:
 
 # ── Node 4: Executive ─────────────────────────────────────────────────────────
 
+def whatif_node(state: AgentState) -> dict:
+    """
+    Short-circuit node for What-If Simulation queries.
+
+    Calls simulate_whatif() with parameters extracted by the planner, then
+    formats the result using format_whatif_output(). Produces a final_answer
+    dict directly — skipping execute_step and executive entirely.
+
+    WHY a dedicated node instead of inline logic in executive_node?
+        WHATIF queries require zero DB agent calls, zero RAG calls, zero LLM
+        calls. A separate node makes the bypass explicit in the graph topology
+        and keeps executive_node's logic clean.
+
+    Returns:
+        {"final_answer": dict}  ← same shape as executive_node output
+    """
+    import time as _time
+    from agents.roi_agent      import simulate_whatif
+    from agents.executive_agent import format_whatif_output
+
+    plan   = state.get("plan", {})
+    entity = plan.get("whatif_entity")
+    metric = plan.get("whatif_metric", "delay_rate")
+    target = plan.get("whatif_target")
+
+    log.info(
+        f"whatif_node | entity='{entity}' | metric='{metric}' | "
+        f"target={target}"
+    )
+
+    t0         = _time.monotonic()
+    sim_result = simulate_whatif(entity=entity, metric=metric, target_value=target)
+    answer_text = format_whatif_output(sim_result)
+    elapsed_ms  = int((_time.monotonic() - t0) * 1000)
+
+    final_answer = {
+        "answer":                  answer_text,
+        "sources":                 ["What-If Simulation · DB-grounded"],
+        "sql_shown":               [],
+        "agents_used":             ["ROI Agent (simulation)"],
+        "confidence":              0.85 if "error" not in sim_result else 0.0,
+        "groundedness_score":      1.0,
+        "human_approval_required": False,
+        "approval_reason":         "",
+        "impact_summary":          "",
+        "tokens_used":             0,
+        "cost_usd":                0.0,
+        "execution_time_ms":       elapsed_ms,
+        "warnings":                [],
+    }
+
+    log.success(
+        f"whatif_node | COMPLETE | "
+        f"entity='{entity}' | "
+        f"time={elapsed_ms}ms | "
+        f"error={'yes' if 'error' in sim_result else 'no'}"
+    )
+    return {"final_answer": final_answer}
+
+
 def executive_node(state: AgentState) -> dict:
     """
     Format all verified findings into a role-appropriate answer.
@@ -541,6 +601,21 @@ def executive_node(state: AgentState) -> dict:
 #  These functions read state and return a string that LangGraph uses to
 #  select the next edge. Pure Python — zero LLM tokens.
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def _route_after_planner(state: AgentState) -> str:
+    """
+    Decide whether to run the normal step-loop or short-circuit to whatif_node.
+
+    Returns:
+        "whatif"  → WHATIF_QUERY detected — skip all agents, run simulation
+        "execute" → normal plan — proceed to execute_step loop
+    """
+    plan = state.get("plan", {})
+    if plan.get("query_type") == "WHATIF_QUERY":
+        log.info("_route_after_planner | WHATIF_QUERY detected — routing to whatif_node")
+        return "whatif"
+    return "execute"
+
 
 def _route_after_guardrails(state: AgentState) -> str:
     """
@@ -632,6 +707,7 @@ def build_graph() -> "CompiledGraph":  # type: ignore[name-defined]
     # ── Register nodes ────────────────────────────────────────────────────────
     builder.add_node("input_guardrails", input_guardrails_node)
     builder.add_node("planner",          planner_node)
+    builder.add_node("whatif",           whatif_node)
     builder.add_node("execute_step",     execute_step_node)
     builder.add_node("executive",        executive_node)
 
@@ -648,8 +724,22 @@ def build_graph() -> "CompiledGraph":  # type: ignore[name-defined]
         },
     )
 
-    # ── Planner → always run first execute_step ───────────────────────────────
-    builder.add_edge("planner", "execute_step")
+    # ── Planner → WHATIF short-circuit OR normal execute_step loop ────────────
+    # WHY conditional here instead of an unconditional edge?
+    #   WHATIF_QUERY plans have steps=[] — there is nothing for execute_step
+    #   to process. Routing them to whatif_node avoids the step loop entirely
+    #   and keeps the graph topology honest about what actually runs.
+    builder.add_conditional_edges(
+        "planner",
+        _route_after_planner,
+        {
+            "whatif":  "whatif",       # simulation path — no agents, no LLM
+            "execute": "execute_step", # normal path — run specialist agents
+        },
+    )
+
+    # ── Whatif → end (no executive needed — answer already formatted) ─────────
+    builder.add_edge("whatif", END)
 
     # ── Execute step → loop until all steps done, then executive ──────────────
     builder.add_conditional_edges(

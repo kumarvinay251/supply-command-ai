@@ -145,6 +145,33 @@ INTENT_KEYWORDS: dict[str, list[str]] = {
 DEFAULT_INTENT = "DELAY_ANALYSIS"
 
 
+# ── Supplier alias mapping ────────────────────────────────────────────────────
+# WHY a mapping instead of a raw regex?
+#   Users say "Supplier A", "SupplierC", "S001" — the database stores "SUP001".
+#   A lookup table is explicit and auditable; regex only catches the canonical
+#   form and silently misses every alias. Extend this dict as new aliases appear.
+SUPPLIER_ALIASES: dict[str, list[str]] = {
+    "SUP001": ["SUP001", "SUPPLIERA", "SUPPLIER A", "S001"],
+    "SUP002": ["SUP002", "SUPPLIERB", "SUPPLIER B", "S002"],
+    "SUP003": ["SUP003", "SUPPLIERC", "SUPPLIER C", "S003"],
+}
+
+
+def resolve_supplier(query: str) -> "str | None":
+    """
+    Return the canonical supplier ID (e.g. "SUP003") for any recognised alias
+    in query, or None if no supplier is mentioned.
+
+    Normalises the query to uppercase, strips hyphens and underscores so that
+    "Supplier-C", "SUPPLIER_C", and "Supplier C" all resolve to "SUP003".
+    """
+    q = query.upper().replace("-", "").replace("_", "")
+    for supplier_id, aliases in SUPPLIER_ALIASES.items():
+        if any(alias in q for alias in aliases):
+            return supplier_id
+    return None
+
+
 def classify_intent(query: str) -> dict:
     """
     Classify a natural-language query into one or two supply chain intents.
@@ -734,6 +761,53 @@ def create_plan(query: str, role: str) -> dict:
             "role":   role,
         }
 
+    # ── Stage 3b: What-If Simulation Detection ───────────────────────────────
+    # WHY detect WHATIF before intent classification?
+    #   WHATIF queries are a distinct query type that bypasses all DB/RAG/ROI
+    #   agents entirely. They use pure Python math from direct sqlite3.
+    #   Detecting early avoids misclassification as DELAY_ANALYSIS or FINANCIAL.
+    _WHATIF_TRIGGERS = [
+        "what if", "what-if", "if we improve", "if we fix",
+        "if delay rate drops", "simulate", "scenario",
+        "what would happen", "if we reduce", "if we increase",
+        "if we cut", "if we lower",
+    ]
+    query_lower_early = query.lower()
+    _is_whatif = any(t in query_lower_early for t in _WHATIF_TRIGGERS)
+
+    if _is_whatif:
+        # Resolve supplier entity via alias mapping (handles "Supplier C", "S001", etc.)
+        _entity = resolve_supplier(query)
+
+        # Extract target percentage (last % in the query, e.g. "10%", "5.5%")
+        _pct_matches = re.findall(r'(\d+(?:\.\d+)?)\s*%', query)
+        _target      = float(_pct_matches[-1]) if _pct_matches else None
+
+        log.info(
+            f"create_plan | WHATIF QUERY DETECTED | "
+            f"entity='{_entity}' | target={_target}%"
+        )
+        return {
+            "status":          "ok",
+            "query":           query,
+            "role":            role,
+            "query_type":      "WHATIF_QUERY",
+            "intent":          "SIMULATION",
+            "secondary_intent": None,
+            "confidence":      1.0,
+            "keywords_matched": [t for t in _WHATIF_TRIGGERS
+                                  if t in query_lower_early],
+            "metric_definition": "WHATIF",
+            "steps":           [],   # graph skips execute_step entirely
+            "total_steps":     0,
+            "estimated_llm_calls": 0,
+            "human_checkpoints":   [],
+            "whatif_entity":   _entity,
+            "whatif_metric":   "delay_rate",
+            "whatif_target":   _target,
+            "created_at":      datetime.now(timezone.utc).isoformat(),
+        }
+
     # ── Stage 4: Intent Classification ───────────────────────────────────────
     intent_result = classify_intent(query)
     primary_intent   = intent_result["primary_intent"]
@@ -843,9 +917,15 @@ def create_plan(query: str, role: str) -> dict:
         "roi":            ["roi", "return on investment"],
     }
 
+    # Build supplier dimension triggers dynamically from SUPPLIER_ALIASES so the
+    # list stays in sync automatically as new aliases are added to the mapping.
+    _supplier_alias_triggers = [
+        alias.lower()
+        for aliases in SUPPLIER_ALIASES.values()
+        for alias in aliases
+    ]
     _DIMENSION_TRIGGERS: dict[str, list[str]] = {
-        "supplier":         ["supplier", "vendor",
-                             "sup001", "sup002", "sup003"],
+        "supplier":         ["supplier", "vendor"] + _supplier_alias_triggers,
         "region":           ["region"],
         "product_category": ["product category", "category", "product"],
     }
@@ -863,6 +943,27 @@ def create_plan(query: str, role: str) -> dict:
         if any(t in query_lower for t in triggers):
             detected_dimension = dim_key
             break
+
+    # Resolve a specific supplier entity from the query using the alias mapping.
+    # WHY resolve here and not inside the dimension loop?
+    #   Dimension detection answers "what level of analysis?" (fleet / supplier /
+    #   region). Entity detection answers "which specific supplier?". They are
+    #   orthogonal — entity resolution is always attempted regardless of which
+    #   dimension wins. Keeping them separate makes each step independently
+    #   testable and avoids coupling alias logic into the dimension triggers.
+    #
+    # WHY auto-promote detected_dimension to "supplier" when entity found?
+    #   "Which Supplier B OTD?" contains "supplier" so the loop already sets
+    #   detected_dimension="supplier". But "Supplier B's delay rate?" might not
+    #   contain the word "supplier" yet still clearly refers to one entity —
+    #   the entity resolution acts as a fallback promoter.
+    detected_entity = resolve_supplier(query)
+    if detected_entity and detected_dimension == "fleet":
+        detected_dimension = "supplier"
+        log.info(
+            f"create_plan | ENTITY PROMOTION | "
+            f"entity='{detected_entity}' promoted detected_dimension → 'supplier'"
+        )
 
     if any(w in query_lower for w in _POLARITY_LOWEST):
         detected_polarity = "lowest"
@@ -1280,7 +1381,11 @@ def create_plan(query: str, role: str) -> dict:
     #   the action target. Recognising supplier IDs as implicit action signals
     #   ensures human approval fires for these queries without needing the
     #   user to phrase them with explicit verbs like "terminate" or "switch".
-    _SUPPLIER_IDS  = ["sup001", "sup002", "sup003"]
+    _SUPPLIER_IDS  = [
+        alias.lower()
+        for aliases in SUPPLIER_ALIASES.values()
+        for alias in aliases
+    ]
     q_lower_action = query.lower()
     is_action_decision = (
         query_type == "DECISION_QUERY"
@@ -1343,6 +1448,7 @@ def create_plan(query: str, role: str) -> dict:
         "detected_metric":    detected_metric,
         "detected_dimension": detected_dimension,
         "detected_polarity":  detected_polarity,
+        "detected_entity":    detected_entity,
         "multi_row":          multi_row,
         "confidence":         confidence,
         "keywords_matched":   intent_result["keywords_matched"],
