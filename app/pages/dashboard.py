@@ -24,9 +24,10 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 
-from database.db_connection import execute_query
-from agents.alert_agent    import evaluate_alerts
-from app.styles            import get_styles
+from database.db_connection        import execute_query
+from agents.alert_agent            import evaluate_alerts
+from agents.data_health_agent      import run_health_checks
+from app.styles                    import get_styles
 
 
 # ── Chart colour palette ──────────────────────────────────────────────────────
@@ -396,14 +397,95 @@ def render(role: str) -> None:
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown(
-        "<h2 style='margin-bottom:4px;'>📊 Supply Chain Dashboard</h2>",
-        unsafe_allow_html=True,
+    # ── Data health check — run once per session, cache result ───────────────
+    if "data_health" not in st.session_state:
+        st.session_state["data_health"] = run_health_checks()
+
+    health = st.session_state["data_health"]
+    score  = health["health_score"]
+
+    score_color = (
+        "#2ECC71" if score >= 80
+        else "#E67E22" if score >= 60
+        else "#E74C3C"
     )
-    st.caption(
-        f"Live data from supply_chain.db · Role: **{role}** · "
-        "Auto-refreshes every 60 seconds"
+    score_icon = (
+        "✅" if score >= 80
+        else "⚠️" if score >= 60
+        else "🔴"
     )
+
+    # ── Header row: title left, health badge right ────────────────────────────
+    col_title, col_badge = st.columns([4, 1])
+
+    with col_title:
+        st.markdown("## 📊 Supply Chain Dashboard")
+        st.caption(
+            f"Live data from supply_chain.db · "
+            f"Role: **{role}** · "
+            f"Auto-refreshes every 60 seconds"
+        )
+
+    with col_badge:
+        st.markdown(f"""
+        <div style="text-align:right; padding-top:8px;">
+            <span style="font-family:monospace; font-size:12px;
+                         color:#5a6a8a;">Data Health</span><br/>
+            <span style="font-family:monospace; font-size:22px;
+                         font-weight:800; color:{score_color};">
+                {score_icon} {score}%
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Health detail — collapsed by default ──────────────────────────────────
+    with st.expander(
+        f"🔬 View Data Health Report "
+        f"({health['high_count']} HIGH · "
+        f"{health['medium_count']} MEDIUM issues)",
+        expanded=False,
+    ):
+        if not health["issues"]:
+            st.success("✅ All checks passed.")
+        else:
+            for issue in health["issues"]:
+                sev_color = (
+                    "#ff4444" if issue["severity"] == "HIGH"
+                    else "#ffc947"
+                )
+                sev_icon = (
+                    "🔴" if issue["severity"] == "HIGH"
+                    else "🟡"
+                )
+                st.markdown(f"""
+                <div style="border-left: 3px solid {sev_color};
+                            padding: 10px 16px;
+                            background: rgba(255,255,255,0.02);
+                            border-radius: 4px;
+                            margin-bottom: 10px;">
+                    <div style="font-size:13px; font-weight:700;
+                                margin-bottom:4px;">
+                        {sev_icon} {issue['check']}
+                        <span style="font-size:10px;
+                                     color:{sev_color};
+                                     margin-left:8px;
+                                     font-family:monospace;">
+                            {issue['severity']}
+                        </span>
+                    </div>
+                    <div style="font-size:12px; margin-bottom:4px;">
+                        {issue['finding']}
+                    </div>
+                    <div style="font-size:11px; color:#5a6a8a;">
+                        💡 {issue['recommendation']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.caption(
+                "⚠️ Queries touching flagged metrics will show "
+                "data quality caveats in chat responses."
+            )
 
     # ── Load all data ──────────────────────────────────────────────────────────
     with st.spinner("Loading dashboard data..."):
