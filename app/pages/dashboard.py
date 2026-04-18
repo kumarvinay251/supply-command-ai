@@ -397,95 +397,40 @@ def render(role: str) -> None:
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Data health check — run once per session, cache result ───────────────
+    # Health check — run once per session
     if "data_health" not in st.session_state:
         st.session_state["data_health"] = run_health_checks()
 
     health = st.session_state["data_health"]
-    score  = health["health_score"]
+    score = health["health_score"]
+    score_color = "green" if score >= 80 else "orange" if score >= 60 else "red"
+    score_icon = "✅" if score >= 80 else "⚠️" if score >= 60 else "🔴"
 
-    score_color = (
-        "#2ECC71" if score >= 80
-        else "#E67E22" if score >= 60
-        else "#E74C3C"
-    )
-    score_icon = (
-        "✅" if score >= 80
-        else "⚠️" if score >= 60
-        else "🔴"
-    )
-
-    # ── Header row: title left, health badge right ────────────────────────────
     col_title, col_badge = st.columns([4, 1])
-
     with col_title:
         st.markdown("## 📊 Supply Chain Dashboard")
-        st.caption(
-            f"Live data from supply_chain.db · "
-            f"Role: **{role}** · "
-            f"Auto-refreshes every 60 seconds"
-        )
-
+        st.caption(f"Live data from supply_chain.db · Role: **{role}** · Auto-refreshes every 60 seconds")
     with col_badge:
         st.markdown(f"""
         <div style="text-align:right; padding-top:8px;">
-            <span style="font-family:monospace; font-size:12px;
-                         color:#5a6a8a;">Data Health</span><br/>
-            <span style="font-family:monospace; font-size:22px;
-                         font-weight:800; color:{score_color};">
+            <span style="font-family:monospace; font-size:11px; color:#5a6a8a;">Data Health</span><br/>
+            <span style="font-family:monospace; font-size:22px; font-weight:800; color:{score_color};">
                 {score_icon} {score}%
             </span>
         </div>
         """, unsafe_allow_html=True)
 
-    # ── Health detail — collapsed by default ──────────────────────────────────
-    with st.expander(
-        f"🔬 View Data Health Report "
-        f"({health['high_count']} HIGH · "
-        f"{health['medium_count']} MEDIUM issues)",
-        expanded=False,
-    ):
-        if not health["issues"]:
-            st.success("✅ All checks passed.")
-        else:
-            for issue in health["issues"]:
-                sev_color = (
-                    "#ff4444" if issue["severity"] == "HIGH"
-                    else "#ffc947"
-                )
-                sev_icon = (
-                    "🔴" if issue["severity"] == "HIGH"
-                    else "🟡"
-                )
-                st.markdown(f"""
-                <div style="border-left: 3px solid {sev_color};
-                            padding: 10px 16px;
-                            background: rgba(255,255,255,0.02);
-                            border-radius: 4px;
-                            margin-bottom: 10px;">
-                    <div style="font-size:13px; font-weight:700;
-                                margin-bottom:4px;">
-                        {sev_icon} {issue['check']}
-                        <span style="font-size:10px;
-                                     color:{sev_color};
-                                     margin-left:8px;
-                                     font-family:monospace;">
-                            {issue['severity']}
-                        </span>
-                    </div>
-                    <div style="font-size:12px; margin-bottom:4px;">
-                        {issue['finding']}
-                    </div>
-                    <div style="font-size:11px; color:#5a6a8a;">
-                        💡 {issue['recommendation']}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.caption(
-                "⚠️ Queries touching flagged metrics will show "
-                "data quality caveats in chat responses."
-            )
+    with st.expander(f"🔬 Data Health Report ({health['high_count']} HIGH · {health['medium_count']} MEDIUM issues)", expanded=False):
+        for issue in health.get("issues", []):
+            sev_color = "#ff4444" if issue["severity"] == "HIGH" else "#ffc947"
+            st.markdown(f"""
+        <div style="border-left:3px solid {sev_color}; padding:10px 16px;
+                    background:rgba(255,255,255,0.02); border-radius:4px; margin-bottom:8px;">
+            <strong style="color:{sev_color};">{issue['severity']} — {issue['check']}</strong><br/>
+            <span style="font-size:13px;">{issue['finding']}</span><br/>
+            <span style="font-size:11px; color:#5a6a8a;">💡 {issue['recommendation']}</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     # ── Load all data ──────────────────────────────────────────────────────────
     with st.spinner("Loading dashboard data..."):
