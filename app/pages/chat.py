@@ -141,13 +141,17 @@ def _render_agent_trace(result: dict) -> None:
     )
 
     # ── Plan explanation (collapsed) ──────────────────────────────────────────
-    # Only show the investigation plan when there are more than 2 steps.
-    # A 2-step plan (DB Agent + Executive Agent) is a simple metric lookup —
-    # showing "View Investigation Plan" for it implies more complexity than
-    # there is and clutters the UI. Decision queries and full investigation
-    # plans (≥ 3 steps) still show the panel.
-    plan_steps = result.get("plan_steps", [])
-    if plan_text and len(plan_steps) > 2:
+    # Only show investigation plan if steps exist AND it is not a simple metric
+    plan_steps        = result.get("plan_steps", [])
+    metric_definition = result.get("metric_definition", "")
+    query_type        = result.get("query_type", "")
+
+    if (
+        plan_steps
+        and len(plan_steps) > 0
+        and metric_definition not in ("SIMPLE_METRIC", "SIMPLE_COUNT")
+        and query_type != "METRIC_QUERY"
+    ):
         with st.expander("📋 View Investigation Plan", expanded=False):
             st.markdown(
                 f"<pre style='font-size:0.72rem; color:#CCCCCC; "
