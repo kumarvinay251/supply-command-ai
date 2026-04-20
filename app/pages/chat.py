@@ -20,6 +20,7 @@ Data flow:
 import sys
 import os
 import time
+import re
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if _ROOT not in sys.path:
@@ -28,6 +29,13 @@ if _ROOT not in sys.path:
 import streamlit as st
 from services.graph import run_pipeline
 from app.styles    import get_styles
+
+
+def clean_trace_text(text) -> str:
+    """Strip any HTML tags from agent trace field values before interpolation."""
+    if not text:
+        return ""
+    return re.sub(r'<[^>]+>', '', str(text)).strip()
 
 
 # ── Agent metadata for trace panel display ────────────────────────────────────
@@ -83,6 +91,8 @@ def _render_agent_trace(result: dict) -> None:
         meta   = _AGENT_META.get(agent_key, {"icon": "🤖", "label": agent_key, "desc": ""})
         is_llm = agent_key == "executive_agent"
         toks   = tokens_used if is_llm else 0
+        _label = clean_trace_text(meta['label'])
+        _desc  = clean_trace_text(meta['desc'])
 
         st.markdown(
             f"""
@@ -92,12 +102,12 @@ def _render_agent_trace(result: dict) -> None:
                 <div style="display:flex; justify-content:space-between;
                             align-items:center;">
                     <span style="font-size:0.9rem;">
-                        {meta['icon']} <b>{meta['label']}</b>
+                        {meta['icon']} <b>{_label}</b>
                     </span>
                     <span style="font-size:0.72rem; color:#2ECC71;">✅ Complete</span>
                 </div>
                 <div style="font-size:0.72rem; color:#888888; margin-top:4px;">
-                    {meta['desc']}
+                    {_desc}
                     {"&nbsp;·&nbsp;" + str(toks) + " tokens" if is_llm and toks else ""}
                 </div>
             </div>
@@ -133,7 +143,7 @@ def _render_agent_trace(result: dict) -> None:
             <span style="color:#FFFFFF; font-weight:600;">{exec_ms}ms</span><br>
             <span style="color:#AAAAAA;">Agents Used</span>&nbsp;&nbsp;
             <span style="color:#FFFFFF; font-weight:600;">
-                {len(all_agents)}
+                {len(agents_used)}
             </span>
         </div>
         """,
