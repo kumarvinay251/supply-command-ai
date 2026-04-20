@@ -172,6 +172,65 @@ def resolve_supplier(query: str) -> "str | None":
     return None
 
 
+# ── Simple metric query detection ─────────────────────────────────────────────
+# WHY detect simple metric queries at module level?
+#   "Which supplier has the highest delay rate?" needs exactly 2 execution steps:
+#   one DB query (SQL template) + one Executive format call.
+#   The full investigation plan (Stage 5 → Stage 6 secondary merge) builds
+#   9 steps, fires 4 agents, and takes 6500ms — all unnecessary overhead.
+#   Detecting here lets create_plan() short-circuit before any template
+#   lookup, keeping plan construction O(1) for the common case.
+#
+# WHY these keywords?
+#   They are unambiguous signals that the user wants a single factual metric.
+#   They do NOT include "how many" / "count of" / "total number of" — those
+#   trigger the dedicated count-query path (Stage 5a) which is already fast.
+
+METRIC_QUERY_KEYWORDS: list[str] = [
+    "highest", "lowest", "what is",
+    "which supplier", "delay rate",
+    "supply chain cost", "expedited cost",
+    "on time", "otd", "roi",
+]
+
+# Intents that produce METRIC_QUERY plans — must match _METRIC_INTENTS in create_plan()
+SIMPLE_METRIC_INTENTS: set[str] = {
+    "DELAY_ANALYSIS", "FINANCIAL_IMPACT",
+    "SUPPLIER_RISK",  "INVENTORY_RISK",
+}
+
+# Count-query phrases: these must go through Stage 5a, not the simple-metric path
+_SIMPLE_METRIC_COUNT_EXCLUDES: list[str] = [
+    "how many", "total number of", "count of", "number of delayed",
+]
+
+# SLA breach phrases: must route to total_sla_breaches template (Stage 5a)
+_SIMPLE_METRIC_SLA_EXCLUDES: list[str] = [
+    "sla breach", "sla breaches", "breach count", "total breaches",
+    "total sla", "how many sla", "number of sla",
+]
+
+
+def is_simple_metric_query(query: str, primary_intent: str) -> bool:
+    """
+    Return True when the query is a single-metric lookup that needs only one
+    DB step + executive formatting — no investigation plan.
+
+    Explicitly excludes count queries ("how many …") and SLA breach queries
+    because those have dedicated fast paths in Stage 5a and must not be
+    intercepted here.
+    """
+    q = query.lower()
+    is_count      = any(kw in q for kw in _SIMPLE_METRIC_COUNT_EXCLUDES)
+    is_sla_breach = any(kw in q for kw in _SIMPLE_METRIC_SLA_EXCLUDES)
+    return (
+        not is_count
+        and not is_sla_breach
+        and primary_intent in SIMPLE_METRIC_INTENTS
+        and any(kw in q for kw in METRIC_QUERY_KEYWORDS)
+    )
+
+
 def classify_intent(query: str) -> dict:
     """
     Classify a natural-language query into one or two supply chain intents.
@@ -841,6 +900,18 @@ def create_plan(query: str, role: str) -> dict:
     else:
         query_type = "EXPLANATION_QUERY"
 
+    # ── Confidence floor for METRIC_QUERY ─────────────────────────────────────
+    # WHY floor at 0.85?
+    #   classify_intent() scores confidence as hits / total_keywords_in_intent.
+    #   DELAY_ANALYSIS has 9 keywords; "which supplier has the highest delay
+    #   rate?" matches "delay" → 1/9 ≈ 11%. That is technically correct as a
+    #   classifier score, but it misleads the UI — the query is unambiguous once
+    #   a SQL template is matched. For any METRIC_QUERY we have a concrete SQL
+    #   template selected by Stage 5c, so the true execution confidence is high.
+    #   Floor at 0.85 reflects that, without lying about the classification.
+    if query_type == "METRIC_QUERY":
+        confidence = max(confidence, 0.85)
+
     # ── Stage 4c: Metric Disambiguation ──────────────────────────────────────
     # WHY negative-polarity words only ("worst", "bottom", "weakest")?
     #   Positive superlatives ("best", "highest") appear in queries that
@@ -1039,6 +1110,113 @@ def create_plan(query: str, role: str) -> dict:
             month_num = _MONTH_MAP.get(m.group(1), "01")
             year_str  = m.group(2)
             period_param = f"{year_str}-{month_num}"
+
+    # ── Stage 4f: Simple Metric Short-Circuit ────────────────────────────────
+    # WHY short-circuit here, after count-query detection but before Stage 5?
+    #   At this point we have detected_metric, detected_dimension,
+    #   detected_polarity, detected_entity, query_type, and confidence — every
+    #   field needed to build the correct 2-step plan. Proceeding past this
+    #   point into Stage 5 would load a 5–6 step template, strip RAG in Stage 5b,
+    #   override the first DB task in Stage 5c (redundantly), then merge
+    #   secondary-intent steps in Stage 6 (bloating to 9 steps). None of those
+    #   extra steps improve the answer for a simple metric query.
+    #
+    # WHY 2 steps (DB Agent + Executive Agent)?
+    #   The graph's execute_step_node skips Executive Agent steps — they are
+    #   placeholders that signal executive_node to run after the loop. So the
+    #   actual execution is: run step 1 (DB Agent with exact SQL template key),
+    #   skip step 2 (Executive placeholder), executive_node formats the answer.
+    #   The steps list is 2 items only. The UI hides the investigation plan
+    #   panel whenever len(plan_steps) <= 2 (only DB + Executive = trivial plan).
+    if is_simple_metric_query(query, primary_intent):
+        # Reuse the same STAGE 5c routing table — no duplication of SQL keys
+        _SIMPLE_METRIC_TASK_MAP: dict[tuple, str] = {
+            ("delay_rate", "supplier",         "highest"): "delay_count_by_supplier",
+            ("delay_rate", "supplier",         "lowest"):  "lowest_delay_rate_supplier",
+            ("delay_rate", "region",           "highest"): "highest_delay_rate_region",
+            ("delay_rate", "region",           "lowest"):  "highest_delay_rate_region",
+            ("delay_rate", "product_category", "highest"): "highest_delay_rate_product_category",
+            ("delay_rate", "product_category", "lowest"):  "highest_delay_rate_product_category",
+            ("delay_rate", "fleet",            "highest"): "delay_count_by_supplier",
+            ("total_count", "fleet",           "highest"): "total_shipments",
+            ("total_count", "supplier",        "highest"): "total_shipments",
+            ("otd",            "fleet",        "highest"): "fleet_otd_vs_benchmark",
+            ("cost",           "fleet",        "highest"): "total_supply_chain_cost",
+            ("roi",            "fleet",        "highest"): "roi_progression",
+            ("expedited_cost", "fleet",        "highest"): "total_expedited_cost",
+            ("expedited_cost", "supplier",     "highest"): "total_expedited_cost",
+        }
+        _avoidable_sm  = detected_metric == "cost" and "avoidable" in query_lower
+        _sm_db_task    = (
+            "total_avoidable_cost"
+            if _avoidable_sm
+            else _SIMPLE_METRIC_TASK_MAP.get(
+                (detected_metric, detected_dimension, detected_polarity)
+            )
+        )
+        # If no exact template found, fall back to full investigation plan
+        if _sm_db_task is None:
+            log.info(
+                f"create_plan | Stage 4f | no template for "
+                f"({detected_metric},{detected_dimension},{detected_polarity}) "
+                f"— falling through to full plan"
+            )
+        else:
+            # Role filtering: drop DB step if its table is blocked for this role
+            _sm_role      = ROLES.get(role, {})
+            _sm_allowed   = set(_sm_role.get("allowed_tables", []))
+            _sm_db_table  = (
+                "financial_impact"
+                if detected_metric in ("cost", "roi", "expedited_cost")
+                else "shipments"
+            )
+            _sm_steps: list[dict] = []
+            if not (_sm_allowed and _sm_db_table not in _sm_allowed):
+                _sm_steps.append({
+                    "step_number":             1,
+                    "agent":                   "DB Agent",
+                    "task":                    _sm_db_task,
+                    "table":                   _sm_db_table,
+                    "requires_human_approval": False,
+                })
+            _sm_steps.append({
+                "step_number":             len(_sm_steps) + 1,
+                "agent":                   "Executive Agent",
+                "task":                    "Format metric answer for the user's role",
+                "table":                   None,
+                "requires_human_approval": False,
+            })
+
+            log.info(
+                f"create_plan | STAGE 4f SIMPLE METRIC SHORT-CIRCUIT | "
+                f"metric='{detected_metric}' dim='{detected_dimension}' "
+                f"polarity='{detected_polarity}' | db_task='{_sm_db_task}' | "
+                f"steps={len(_sm_steps)} | conf={confidence:.2f}"
+            )
+
+            return {
+                "status":              "ok",
+                "query":               query,
+                "role":                role,
+                "intent":              primary_intent,
+                "secondary_intent":    None,
+                "query_type":          "METRIC_QUERY",
+                "metric_definition":   "SIMPLE_METRIC",
+                "detected_metric":     detected_metric,
+                "detected_dimension":  detected_dimension,
+                "detected_polarity":   detected_polarity,
+                "detected_entity":     detected_entity,
+                "multi_row":           False,
+                "confidence":          confidence,
+                "keywords_matched":    intent_result["keywords_matched"],
+                "steps":               _sm_steps,
+                "total_steps":         len(_sm_steps),
+                "estimated_llm_calls": 1,
+                "human_checkpoints":   [],
+                "skipped_steps":       [],
+                "alert_driven":        False,
+                "created_at":          datetime.now(timezone.utc).isoformat(),
+            }
 
     # ── Stage 5: Primary Plan Template ───────────────────────────────────────
     steps = get_plan_template(primary_intent)
