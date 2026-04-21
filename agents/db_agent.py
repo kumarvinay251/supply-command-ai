@@ -554,6 +554,20 @@ _SQL_TEMPLATES: dict[str, str] = {
         WHERE status = 'Delayed'
     """,
 
+    # ── Maximum observed delay (scalar — no avg contamination) ───────────────
+    # WHY a separate template from avg_delay_days?
+    #   avg_delay_days returns BOTH avg and max, causing the Executive Agent
+    #   bypass to produce "Average delay ... (max 12 days)" when the user
+    #   asked only for the maximum. A dedicated scalar avoids this contamination
+    #   and lets the test assert "12" without "6.0" or "average" appearing.
+    "max_delay_days": """
+        SELECT
+            MAX(delay_days) AS max_delay,
+            COUNT(*)        AS delayed_count
+        FROM shipments
+        WHERE status = 'Delayed'
+    """,
+
     "overall_delay_rate": """
         SELECT
             COUNT(*) AS total,
@@ -739,7 +753,7 @@ _SHIPMENT_TEMPLATES: set[str] = {
     "fleet_otd_vs_benchmark", "total_sla_breaches", "supplier_delay_rate",
     "high_risk_shipments", "total_shipment_value", "avg_shipment_value",
     "supplier_shipment_value", "region_shipment_value", "category_shipment_value",
-    "avg_delay_days", "overall_delay_rate",
+    "avg_delay_days", "max_delay_days", "overall_delay_rate",
 }
 
 
@@ -891,6 +905,7 @@ def get_sql_template(task: str, role: str) -> dict:
         "region_shipment_value":             "shipments",
         "category_shipment_value":           "shipments",
         "avg_delay_days":                    "shipments",
+        "max_delay_days":                    "shipments",
         "overall_delay_rate":                "shipments",
         "shipment_date_span":                "shipments",
         "financial_date_span":               "financial_impact",
@@ -1517,6 +1532,18 @@ def interpret_result(task: str, data: list[dict]) -> dict:
         finding    = (
             f"Average delay for delayed shipments: {avg_d:.1f} days "
             f"(max {max_d} days, across {count} delayed shipments)."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "max_delay_days":
+        row        = data[0]
+        max_d      = row.get("max_delay", 0) or 0
+        count      = row.get("delayed_count", 0)
+        key_metric = max_d
+        finding    = (
+            f"Maximum observed delay is {max_d} days "
+            f"(across {count} delayed shipments)."
         )
         confidence = 0.9
         quality    = "complete"

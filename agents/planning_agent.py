@@ -188,7 +188,8 @@ def resolve_supplier(query: str) -> "str | None":
 
 METRIC_QUERY_KEYWORDS: list[str] = [
     "highest", "lowest", "what is", "how much",
-    "which supplier", "delay rate",
+    "which supplier", "which region", "which category",
+    "delay rate", "contributes most",
     "supply chain cost", "expedited cost",
     "on time", "otd", "roi",
     "shipment value", "average delay", "average shipment",
@@ -1024,11 +1025,17 @@ def create_plan(query: str, role: str) -> dict:
         # ── Date span ────────────────────────────────────────────────────────
         "date_span":           ["shipment date span", "date span", "data span",
                                 "earliest shipment", "latest shipment"],
-        # ── AI investment (before generic "cost") ────────────────────────────
+        # ── roi BEFORE ai_investment — "roi of ai investment" must hit roi first ─
+        "roi":            ["roi", "return on investment"],
+        # ── AI investment (includes ai_savings queries) ───────────────────────
         "ai_investment":       ["invested in ai", "ai investment",
-                                "money invested in ai", "spent on ai"],
+                                "money invested in ai", "spent on ai",
+                                "ai save", "ai savings", "ai saved",
+                                "how much ai"],
         # ── Existing metrics ─────────────────────────────────────────────────
-        "delay_rate":    ["delay rate", "delay percentage"],
+        # "contributes" added so "which region contributes most to delays"
+        # is detected as delay_rate + region → highest_delay_rate_region
+        "delay_rate":    ["delay rate", "delay percentage", "contributes"],
         "otd":           ["otd", "on-time delivery", "on time delivery",
                           "on-time rate", "on time rate"],
         "delayed_count": ["delayed shipments", "delayed count"],
@@ -1041,7 +1048,6 @@ def create_plan(query: str, role: str) -> dict:
                            "expedited ship", "expedited freight"],
         "cost":           ["avoidable cost", "supply chain cost", "total cost",
                            "cost", "spend"],
-        "roi":            ["roi", "return on investment"],
     }
 
     # Build supplier dimension triggers dynamically from SUPPLIER_ALIASES so the
@@ -1213,7 +1219,8 @@ def create_plan(query: str, role: str) -> dict:
             ("shipment_value",  "product_category", "highest"): "category_shipment_value",
             # ── NEW: delay statistics ─────────────────────────────────────────
             ("avg_delay",          "fleet",    "highest"): "avg_delay_days",
-            ("max_delay",          "fleet",    "highest"): "avg_delay_days",
+            # max_delay → dedicated scalar template (no avg contamination)
+            ("max_delay",          "fleet",    "highest"): "max_delay_days",
             ("overall_delay_rate", "fleet",    "highest"): "overall_delay_rate",
             # ── NEW: date span ────────────────────────────────────────────────
             ("date_span",          "fleet",    "highest"): "shipment_date_span",

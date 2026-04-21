@@ -1,0 +1,102 @@
+{
+  "run_at": "2026-04-21T15:44:06.669106",
+  "total": 7,
+  "passed": 7,
+  "failed": 0,
+  "pass_pct": 100,
+  "avg_ms": 4,
+  "p99_ms": 21,
+  "by_category": {
+    "financial": {
+      "pass": 7,
+      "fail": 0,
+      "total": 7
+    }
+  },
+  "results": [
+    {
+      "idx": 1,
+      "query": "what is total supply chain cost",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Total supply chain cost 2022\u20132024: $17,443,000 (avg $484,528/month across 36 months).",
+      "confidence": 0.9,
+      "elapsed_ms": 21,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 2,
+      "query": "what is total sc cost for 2022",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Total supply chain cost 2022\u20132022: $5,763,000 (avg $480,250/month across 12 months).",
+      "confidence": 0.9,
+      "elapsed_ms": 2,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 3,
+      "query": "what is 2024 expedited shipping cost",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Total expedited shipping cost is $39,797.",
+      "confidence": 0.9,
+      "elapsed_ms": 3,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 4,
+      "query": "what is total avoidable cost in 2024",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Total avoidable costs 2024\u20132024: $623,297 (expedited freight: $39,797 stockout losses: $209,300 delay penalties: $86,800).",
+      "confidence": 0.9,
+      "elapsed_ms": 2,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 5,
+      "query": "what is 2024 ai roi",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Latest ROI: 340% as of Dec-2024. Cumulative AI savings: $401,000.",
+      "confidence": 0.85,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 6,
+      "query": "how much did ai save in 2024",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "AI investment by year \u2014 2024: invested $94,000 saved $401,000. Total invested: $94,000.",
+      "confidence": 0.9,
+      "elapsed_ms": 2,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 7,
+      "query": "what is roi of ai investment",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Latest ROI: 340% as of Dec-2024. Cumulative AI savings: $401,000.",
+      "confidence": 0.85,
+      "elapsed_ms": 3,
+      "missing": [],
+      "found_bad": []
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "run_at": "2026-04-21T15:42:03.452715",
+  "total": 2,
+  "passed": 2,
+  "failed": 0,
+  "pass_pct": 100,
+  "avg_ms": 6,
+  "p99_ms": 12,
+  "by_category": {
+    "whatif": {
+      "pass": 2,
+      "fail": 0,
+      "total": 2
+    }
+  },
+  "results": [
+    {
+      "idx": 1,
+      "query": "what if sup003 delay rate drops to 10%",
+      "role": "Operations Manager",
+      "category": "whatif",
+      "passed": true,
+      "answer": "\ud83d\udcca **What-If Simulation \u2014 SupplierC (SUP003)**\n\n**Current State**\n  \u2022 Delay rate:             20.00%\n  \u2022 Delayed shipments:      6 of 30\n  \u2022 Expedited cost (actual):$151,999\n\n**Simulated State (target: 10.00%)**\n  \u2022 Delayed shipments:      3 (\u22123 shipments)\n  \u2022 Estimated cost saving:  $75,999\n  \u2022 Annu",
+      "confidence": 0.85,
+      "elapsed_ms": 12,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 2,
+      "query": "what if delay rate increases to 30%",
+      "role": "Operations Manager",
+      "category": "whatif",
+      "passed": true,
+      "answer": "\ud83d\udcca **What-If Simulation \u2014 All Suppliers (Fleet)**\n\n**Current State**\n  \u2022 Delay rate:             15.00%\n  \u2022 Delayed shipments:      15 of 100\n  \u2022 Expedited cost (actual):$379,997\n\n**Simulated State (target: 30.00%)**\n  \u2022 Delayed shipments:      30 (+15 more shipments)\n  \u2022 Additional cost exposure:  $",
+      "confidence": 0.85,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    }
+  ]
+}

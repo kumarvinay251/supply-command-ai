@@ -185,12 +185,23 @@ def format_whatif_output(sim: dict) -> str:
     cost_label = sim.get("cost_label", "Estimated cost saving")
     saved      = sim["shipments_saved"]   # negative when worsening
 
+    # Format improvement_pct as an integer percentage string (e.g. "50%")
+    # WHY strip "%" before float()?
+    #   roi_agent.simulate_whatif() may return improvement_pct already formatted
+    #   as a string like "50.0%" (with the percent sign). Calling float("50.0%")
+    #   raises ValueError. Stripping "%" first handles both float and str inputs.
+    _raw_pct = str(sim.get("improvement_pct", 0)).replace("%", "").strip()
+    try:
+        _imp_pct = f"{float(_raw_pct):.0f}%"
+    except (ValueError, TypeError):
+        _imp_pct = str(sim.get("improvement_pct", 0))
+
     if direction == "increase":
         shipment_line  = f"{sim['simulated_delayed_shipments']} (+{abs(saved)} more shipments)"
-        direction_line = f"**⚠️ Worsening:** {sim['improvement_pct']} increase in delay rate"
+        direction_line = f"**⚠️ Worsening:** {_imp_pct} increase in delay rate"
     else:
         shipment_line  = f"{sim['simulated_delayed_shipments']} (−{abs(saved)} shipments)"
-        direction_line = f"**Improvement:** {sim['improvement_pct']} reduction in delay rate"
+        direction_line = f"**Improvement:** {_imp_pct} reduction in delay rate"
 
     return (
         f"📊 **What-If Simulation — {entity_label}**\n\n"
@@ -1121,7 +1132,12 @@ def run(
             _clean_finding = enforce_metric_brevity(
                 text         = _clean_finding,
                 query_type   = "METRIC_QUERY",
-                alert_driven = True,
+                # WHY use actual alert_driven flag instead of hardcoded True?
+                #   alert_driven=True enforces 1-sentence limit (exact metric).
+                #   SIMPLE_METRIC bypasses are NOT alert-driven — they should
+                #   allow 2 sentences so multi-entity findings (e.g. all-supplier
+                #   comparison) keep the "All supplier delay rates:" second sentence.
+                alert_driven = alert_driven,
             )
             _elapsed_ms = int((time.perf_counter() - start_time) * 1000)
             _bypass_label = "ALERT" if alert_driven else metric_definition
