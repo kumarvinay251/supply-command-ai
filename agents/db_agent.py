@@ -497,6 +497,134 @@ _SQL_TEMPLATES: dict[str, str] = {
         GROUP BY supplier_id
         ORDER BY delay_rate_pct DESC
     """,
+
+    # ── Shipment value templates ──────────────────────────────────────────────
+    "total_shipment_value": """
+        SELECT
+            ROUND(SUM(shipment_value_usd) / 1000000.0, 2) AS total_millions,
+            COUNT(*) AS shipments
+        FROM shipments
+    """,
+
+    "avg_shipment_value": """
+        SELECT
+            ROUND(AVG(shipment_value_usd), 0) AS avg_value,
+            COUNT(*) AS shipments
+        FROM shipments
+    """,
+
+    "supplier_shipment_value": """
+        SELECT
+            supplier_id,
+            ROUND(SUM(shipment_value_usd) / 1000000.0, 2) AS value_millions,
+            ROUND(
+                100.0 * SUM(shipment_value_usd)
+                / (SELECT SUM(shipment_value_usd) FROM shipments), 1
+            ) AS pct
+        FROM shipments
+        GROUP BY supplier_id
+        ORDER BY value_millions DESC
+    """,
+
+    "region_shipment_value": """
+        SELECT
+            region,
+            ROUND(SUM(shipment_value_usd) / 1000000.0, 2) AS value_millions
+        FROM shipments
+        GROUP BY region
+        ORDER BY value_millions DESC
+    """,
+
+    "category_shipment_value": """
+        SELECT
+            product_category,
+            ROUND(SUM(shipment_value_usd) / 1000000.0, 2) AS value_millions
+        FROM shipments
+        GROUP BY product_category
+        ORDER BY value_millions DESC
+    """,
+
+    # ── Delay statistics templates ────────────────────────────────────────────
+    "avg_delay_days": """
+        SELECT
+            ROUND(AVG(delay_days), 1) AS avg_delay,
+            MAX(delay_days)           AS max_delay,
+            COUNT(*)                  AS delayed_count
+        FROM shipments
+        WHERE status = 'Delayed'
+    """,
+
+    "overall_delay_rate": """
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END) AS delayed,
+            ROUND(
+                100.0 * SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END)
+                / COUNT(*), 1
+            ) AS rate
+        FROM shipments
+    """,
+
+    # ── Date span templates ───────────────────────────────────────────────────
+    "shipment_date_span": """
+        SELECT
+            MIN(shipment_date) AS first_date,
+            MAX(shipment_date) AS last_date,
+            COUNT(*)           AS total
+        FROM shipments
+    """,
+
+    "financial_date_span": """
+        SELECT
+            (SELECT period_label FROM financial_impact
+             ORDER BY year ASC, month ASC LIMIT 1)  AS first_period,
+            (SELECT period_label FROM financial_impact
+             ORDER BY year DESC, month DESC LIMIT 1) AS last_period,
+            COUNT(*) AS months
+        FROM financial_impact
+    """,
+
+    # ── Financial breakdown templates ─────────────────────────────────────────
+    "annual_sc_cost": """
+        SELECT
+            year,
+            SUM(total_sc_cost_usd)                          AS annual_cost,
+            ROUND(SUM(total_sc_cost_usd) / 1000000.0, 2)   AS annual_cost_millions
+        FROM financial_impact
+        GROUP BY year
+        ORDER BY year
+    """,
+
+    "ai_investment_by_year": """
+        SELECT
+            year,
+            SUM(ai_investment_usd) AS investment,
+            SUM(ai_savings_usd)    AS savings
+        FROM financial_impact
+        GROUP BY year
+        ORDER BY year
+    """,
+
+    # ── SLA gap view (per supplier) ───────────────────────────────────────────
+    "sla_gap_by_supplier": """
+        SELECT
+            s.supplier_id,
+            s.sla_on_time_target_pct AS target,
+            ROUND(
+                100.0 * SUM(CASE WHEN sh.status = 'OnTime' THEN 1 ELSE 0 END)
+                / COUNT(*), 1
+            ) AS actual_otd,
+            ROUND(
+                s.sla_on_time_target_pct
+                - 100.0 * SUM(CASE WHEN sh.status = 'OnTime' THEN 1 ELSE 0 END)
+                / COUNT(*), 1
+            ) AS sla_gap,
+            SUM(CASE WHEN sh.sla_breach = 'Yes' THEN 1 ELSE 0 END) AS breaches
+        FROM suppliers_master s
+        JOIN shipments sh ON s.supplier_id = sh.supplier_id
+        GROUP BY s.supplier_id
+        ORDER BY sla_gap DESC
+    """,
 }
 
 # ── Task description → template key routing ───────────────────────────────────
@@ -569,7 +697,99 @@ _TASK_ROUTING: list[tuple[list[str], str]] = [
     (["high risk", "risk_flag", "risk flag", "high-risk"],        "high_risk_shipments"),
     # Fallback aliases
     (["supplier performance", "supplier risk", "supplier name"], "supplier_sla_performance"),
+
+    # ── New Category-2 templates ──────────────────────────────────────────────
+    (["total shipment value", "shipment value total"],            "total_shipment_value"),
+    (["average shipment value", "avg shipment value"],            "avg_shipment_value"),
+    (["shipment value by supplier", "supplier.*value",
+      "which supplier carries", "most shipment value"],           "supplier_shipment_value"),
+    (["region.*value", "region carries",
+      "shipment value by region"],                                "region_shipment_value"),
+    (["category.*value", "product.*value",
+      "shipment value by category"],                              "category_shipment_value"),
+    (["average delay", "avg delay", "maximum delay",
+      "max delay", "average delay days"],                         "avg_delay_days"),
+    (["overall delay rate", "fleet.*delay rate",
+      "fleet delay rate", "overall.*delay"],                      "overall_delay_rate"),
+    (["shipment date span", "date.*span", "data.*span",
+      "when.*data", "earliest shipment", "latest shipment"],      "shipment_date_span"),
+    (["financial.*span", "financial date", "financial period"],   "financial_date_span"),
+    (["annual.*cost", "cost.*annual", "cost.*year",
+      "yearly cost", "per year cost"],                            "annual_sc_cost"),
+    (["ai.*invest", "invest.*ai", "money.*ai",
+      "ai investment", "how much.*ai", "spent on ai"],            "ai_investment_by_year"),
+    (["sla.*gap", "delay.*sla", "gap.*sla",
+      "sla gap by supplier", "sla performance gap"],              "sla_gap_by_supplier"),
 ]
+
+
+# ── Templates that use financial_impact (filter by year / month INT columns) ─
+_FINANCIAL_TEMPLATES: set[str] = {
+    "total_supply_chain_cost", "total_expedited_cost", "total_avoidable_cost",
+    "financial_cost_breakdown", "roi_progression", "monthly_cost_trend",
+    "annual_sc_cost", "ai_investment_by_year",
+}
+
+# ── Templates that use shipments (filter by shipment_date TEXT column) ────────
+_SHIPMENT_TEMPLATES: set[str] = {
+    "total_delayed_count", "delayed_count_by_month", "total_shipments",
+    "delay_count_by_supplier", "lowest_delay_rate_supplier",
+    "highest_delay_rate_region", "highest_delay_rate_product_category",
+    "supplier_delay_comparison", "delay_trend_by_month", "top_delay_reasons",
+    "fleet_otd_vs_benchmark", "total_sla_breaches", "supplier_delay_rate",
+    "high_risk_shipments", "total_shipment_value", "avg_shipment_value",
+    "supplier_shipment_value", "region_shipment_value", "category_shipment_value",
+    "avg_delay_days", "overall_delay_rate",
+}
+
+
+def _inject_time_filter(sql: str, template_key: str,
+                        filter_year, filter_month) -> str:
+    """
+    Inject year / month WHERE conditions into a pre-written SQL template.
+
+    WHY runtime injection instead of parameterised placeholders?
+        SQL templates use structural clauses (GROUP BY, ORDER BY) that
+        cannot be parameterised. The year and month come from controlled
+        planning-agent extraction (regex on known years 2022-2024), not
+        raw user input, so string injection is safe here.
+
+    For financial_impact:  year = {y}  [AND month = {m}]
+    For shipments:         strftime('%Y', shipment_date) = '{y}'  [AND month]
+    Templates not in either set are returned unchanged.
+    """
+    import re as _re
+    if not filter_year:
+        return sql
+
+    if template_key in _FINANCIAL_TEMPLATES:
+        conds = f"year = {filter_year}"
+        if filter_month:
+            conds += f" AND month = {filter_month}"
+    elif template_key in _SHIPMENT_TEMPLATES:
+        conds = f"strftime('%Y', shipment_date) = '{filter_year}'"
+        if filter_month:
+            conds += f" AND strftime('%m', shipment_date) = '{filter_month:02d}'"
+    else:
+        return sql   # no filter for join-heavy templates (sla_gap_by_supplier etc.)
+
+    has_where   = bool(_re.search(r'\bWHERE\b', sql, _re.IGNORECASE))
+    connector   = "AND" if has_where else "WHERE"
+
+    # Try to insert before GROUP BY
+    gm = _re.search(r'\bGROUP\s+BY\b', sql, _re.IGNORECASE)
+    if gm:
+        pos = gm.start()
+        return sql[:pos] + f"        {connector} {conds}\n        " + sql[pos:]
+
+    # Try to insert before ORDER BY (no GROUP BY)
+    om = _re.search(r'\bORDER\s+BY\b', sql, _re.IGNORECASE)
+    if om:
+        pos = om.start()
+        return sql[:pos] + f"        {connector} {conds}\n        " + sql[pos:]
+
+    # No GROUP BY, no ORDER BY — append at end
+    return sql.rstrip() + f"\n        {connector} {conds}"
 
 
 def _resolve_template_key(task_description: str) -> Optional[str]:
@@ -665,6 +885,18 @@ def get_sql_template(task: str, role: str) -> dict:
         "supplier_delay_rate":               "shipments",
         "fleet_otd_vs_benchmark":            "shipments",
         "high_risk_shipments":               "shipments",
+        "total_shipment_value":              "shipments",
+        "avg_shipment_value":                "shipments",
+        "supplier_shipment_value":           "shipments",
+        "region_shipment_value":             "shipments",
+        "category_shipment_value":           "shipments",
+        "avg_delay_days":                    "shipments",
+        "overall_delay_rate":                "shipments",
+        "shipment_date_span":                "shipments",
+        "financial_date_span":               "financial_impact",
+        "annual_sc_cost":                    "financial_impact",
+        "ai_investment_by_year":             "financial_impact",
+        "sla_gap_by_supplier":               "suppliers_master",
     }
 
     required_table  = _TEMPLATE_TABLES.get(resolved_key, "shipments")
@@ -1206,6 +1438,186 @@ def interpret_result(task: str, data: list[dict]) -> dict:
         if row_count == 20:
             caveat = "Result capped at 20 rows. More high-risk shipments may exist."
 
+    elif task == "total_shipment_value":
+        row        = data[0]
+        millions   = row.get("total_millions", 0) or 0
+        count      = row.get("shipments", 0)
+        key_metric = millions
+        finding    = (
+            f"Total shipment value across {count} shipments: "
+            f"${millions:.2f}M."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "avg_shipment_value":
+        row        = data[0]
+        avg_val    = row.get("avg_value", 0) or 0
+        count      = row.get("shipments", 0)
+        key_metric = avg_val
+        finding    = (
+            f"Average shipment value: ${avg_val:,.0f} "
+            f"(across {count} shipments)."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "supplier_shipment_value":
+        top        = data[0]
+        key_metric = top.get("value_millions", 0)
+        lines      = [
+            f"{r.get('supplier_id', '?')}: ${r.get('value_millions', 0):.2f}M "
+            f"({r.get('pct', 0)}%)"
+            for r in data
+        ]
+        finding    = (
+            f"Shipment value by supplier — "
+            f"{'; '.join(lines)}. "
+            f"Highest: {top.get('supplier_id', 'N/A')} at "
+            f"${key_metric:.2f}M."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "region_shipment_value":
+        top        = data[0]
+        key_metric = top.get("value_millions", 0)
+        lines      = [
+            f"{r.get('region', '?')}: ${r.get('value_millions', 0):.2f}M"
+            for r in data
+        ]
+        finding    = (
+            f"Shipment value by region — {'; '.join(lines)}. "
+            f"Highest: {top.get('region', 'N/A')} at ${key_metric:.2f}M."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "category_shipment_value":
+        top        = data[0]
+        key_metric = top.get("value_millions", 0)
+        lines      = [
+            f"{r.get('product_category', '?')}: ${r.get('value_millions', 0):.2f}M"
+            for r in data
+        ]
+        finding    = (
+            f"Shipment value by product category — {'; '.join(lines)}. "
+            f"Highest: {top.get('product_category', 'N/A')} at "
+            f"${key_metric:.2f}M."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "avg_delay_days":
+        row        = data[0]
+        avg_d      = row.get("avg_delay", 0) or 0
+        max_d      = row.get("max_delay", 0) or 0
+        count      = row.get("delayed_count", 0)
+        key_metric = avg_d
+        finding    = (
+            f"Average delay for delayed shipments: {avg_d:.1f} days "
+            f"(max {max_d} days, across {count} delayed shipments)."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "overall_delay_rate":
+        row        = data[0]
+        rate       = row.get("rate", 0) or 0
+        total      = row.get("total", 0)
+        delayed    = row.get("delayed", 0)
+        key_metric = rate
+        finding    = (
+            f"Overall fleet delay rate: {rate}% "
+            f"({delayed} delayed of {total} total shipments)."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "shipment_date_span":
+        row        = data[0]
+        first      = row.get("first_date", "N/A")
+        last       = row.get("last_date", "N/A")
+        total      = row.get("total", 0)
+        key_metric = first
+        finding    = (
+            f"Shipment data spans from {first} to {last} "
+            f"({total} total shipments)."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "financial_date_span":
+        row        = data[0]
+        first      = row.get("first_period", "N/A")
+        last       = row.get("last_period", "N/A")
+        months     = row.get("months", 0)
+        key_metric = first
+        finding    = (
+            f"Financial data spans from {first} to {last} "
+            f"({months} months of data)."
+        )
+        confidence = 0.9
+        quality    = "complete"
+        caveat     = "Financial data. Restricted to authorised roles only."
+
+    elif task == "annual_sc_cost":
+        # Multi-row: one row per year (ORDER BY year ASC)
+        lines      = [
+            f"{r.get('year', '?')}: ${r.get('annual_cost', 0):,.0f} "
+            f"(${r.get('annual_cost_millions', 0):.2f}M)"
+            for r in data
+        ]
+        latest     = data[-1]
+        key_metric = latest.get("annual_cost", 0)
+        finding    = (
+            f"Annual supply chain cost — {'; '.join(lines)}."
+        )
+        confidence = 0.9
+        quality    = "complete"
+        caveat     = "Financial data. Restricted to authorised roles only."
+
+    elif task == "ai_investment_by_year":
+        lines      = []
+        for r in data:
+            inv  = r.get("investment") or 0
+            sav  = r.get("savings") or 0
+            yr   = r.get("year", "?")
+            if inv > 0 or sav > 0:
+                lines.append(
+                    f"{yr}: invested ${inv:,.0f}, saved ${sav:,.0f}"
+                )
+            else:
+                lines.append(f"{yr}: $0 invested (pre-deployment)")
+        key_metric = sum(r.get("investment") or 0 for r in data)
+        finding    = (
+            f"AI investment by year — "
+            + ("; ".join(lines) if lines else "No AI investment records found")
+            + f". Total invested: ${key_metric:,.0f}."
+        )
+        confidence = 0.9
+        quality    = "complete"
+        caveat     = "Financial data. Restricted to authorised roles only."
+
+    elif task == "sla_gap_by_supplier":
+        # Rows ordered by sla_gap DESC — largest gap first
+        lines      = [
+            f"{r.get('supplier_id', '?')}: target {r.get('target', '?')}%, "
+            f"actual {r.get('actual_otd', '?')}%, "
+            f"gap {r.get('sla_gap', '?')}% "
+            f"({r.get('breaches', 0)} breaches)"
+            for r in data
+        ]
+        worst      = data[0]
+        key_metric = worst.get("sla_gap", 0)
+        finding    = (
+            f"SLA gap by supplier — {'; '.join(lines)}. "
+            f"Worst gap: {worst.get('supplier_id', 'N/A')} at "
+            f"{key_metric}% below target."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
     else:
         # Unknown task — return raw data with a generic finding
         finding    = f"Query returned {row_count} row(s) for task '{task}'."
@@ -1322,6 +1734,15 @@ def run(step: dict, role: str) -> dict:
 
     sql          = template_result["sql"]
     resolved_key = template_result["task"]
+
+    # ── 3b. Inject time filter if Planning Agent stamped one ──────────────────
+    # WHY here and not inside get_sql_template()?
+    #   get_sql_template() is a pure dict lookup — it cannot take runtime
+    #   step context (filter_year / filter_month). Injecting here keeps
+    #   the template library immutable and all runtime modification in run().
+    filter_year  = step.get("filter_year")
+    filter_month = step.get("filter_month")
+    sql = _inject_time_filter(sql, resolved_key, filter_year, filter_month)
 
     # ── 4+5. Execute SQL via db_connection ────────────────────────────────────
     # WHY read params from step dict?

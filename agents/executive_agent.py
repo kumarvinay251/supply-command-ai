@@ -181,6 +181,17 @@ def format_whatif_output(sim: dict) -> str:
         else sim.get("supplier_name", "Fleet")
     )
 
+    direction  = sim.get("direction", "improvement")
+    cost_label = sim.get("cost_label", "Estimated cost saving")
+    saved      = sim["shipments_saved"]   # negative when worsening
+
+    if direction == "increase":
+        shipment_line  = f"{sim['simulated_delayed_shipments']} (+{abs(saved)} more shipments)"
+        direction_line = f"**⚠️ Worsening:** {sim['improvement_pct']} increase in delay rate"
+    else:
+        shipment_line  = f"{sim['simulated_delayed_shipments']} (−{abs(saved)} shipments)"
+        direction_line = f"**Improvement:** {sim['improvement_pct']} reduction in delay rate"
+
     return (
         f"📊 **What-If Simulation — {entity_label}**\n\n"
         f"**Current State**\n"
@@ -188,10 +199,10 @@ def format_whatif_output(sim: dict) -> str:
         f"  • Delayed shipments:      {sim['current_delayed_shipments']} of {sim['total_shipments']}\n"
         f"  • Expedited cost (actual):{sim['current_expedited_cost']}\n\n"
         f"**Simulated State (target: {sim['target_value']})**\n"
-        f"  • Delayed shipments:      {sim['simulated_delayed_shipments']} (−{sim['shipments_saved']} shipments)\n"
-        f"  • Estimated cost saving:  {sim['estimated_cost_saving']}\n"
+        f"  • Delayed shipments:      {shipment_line}\n"
+        f"  • {cost_label}:  {sim['estimated_cost_saving']}\n"
         f"  • Annual projection:      {sim['annual_saving_estimate']}\n\n"
-        f"**Improvement:** {sim['improvement_pct']} reduction in delay rate\n"
+        f"{direction_line}\n"
         f"**Annual Spend at Risk:** {sim['annual_spend']}\n\n"
         f"_Confidence: {sim['confidence']} · Source: {sim['source']}_"
     )
@@ -259,34 +270,51 @@ def trim_decision_output(text: str) -> str:
 
 def format_financials(text: str) -> str:
     """
-    Post-process any text string to clean up financial formatting.
+    Post-process any answer string to clean up number and financial formatting.
 
-    FIX 7 — why a named function?
-        The cleanup logic (strip ** bold, fix "$ space" artefacts) was
-        previously inline in run(). As a named function it can be:
-        • Called from the Streamlit UI layer for any displayed string.
-        • Unit-tested independently of the full LLM pipeline.
-        • Extended with new formatting rules without touching run().
+    Applied as the absolute last step before every answer return — both the
+    SQL-bypass path and the LLM path.
 
-    Operations:
-        1. Remove ** bold markers that gpt-4o-mini wraps around numbers
-           (e.g. **$5,841,000** → $5,841,000).
-        2. Collapse "$ 5,841,000" (space after $) to "$5,841,000".
-           This artefact occurs because the LLM tokenises $ and the
-           following digit separately.
-
-    Args:
-        text: Any string — typically LLM response text.
-
-    Returns:
-        Cleaned string with markdown and spacing normalised.
+    Operations (in order):
+        1. Rejoin vertically-split numbers (digit\\n,\\ndigit artefacts).
+        2. Fix bullet-point spacing (digit•word → digit\\n• word).
+        3. Fix camelCase merging (wordWord → word Word).
+        4. Strip ** bold markers around numbers/dollar amounts only
+           (preserves **Issue:** and other structural section headers).
+        5. Collapse "$ 1,234" artefact → "$1,234".
+        6. Re-format raw $number strings to ensure comma thousands separators.
     """
-    import re as _re_fmt
-    # Strip bold markers around any content (numbers, text, mixed)
-    text = _re_fmt.sub(r'\*\*([^*\n]+)\*\*', r'\1', text)
-    # Collapse "$ 1,234" → "$1,234"
-    text = _re_fmt.sub(r'\$\s+', '$', text)
-    return text
+    import re as _re
+    if not text:
+        return text
+
+    # 1. Rejoin split digits (e.g. "1\\n,\\n2" → "1,2")
+    text = _re.sub(r'(\d)\s*\n\s*,\s*\n\s*(\d)', r'\1,\2', text)
+    text = _re.sub(r'(\d)\s*\n\s*(\d)', r'\1\2', text)
+
+    # 2. Fix missing spaces around bullet points
+    text = _re.sub(r'(\d)\s*•\s*(\w)', r'\1\n• \2', text)
+
+    # 3. Fix concatenated camelCase words
+    text = _re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+
+    # 4. Strip ** bold only around numbers / dollar amounts
+    text = _re.sub(r'\*\*(\$?[\d,\.]+%?)\*\*', r'\1', text)
+
+    # 5. Collapse "$ 1,234" → "$1,234"
+    text = _re.sub(r'\$\s+', '$', text)
+
+    # 6. Re-format bare $number strings with proper comma separators
+    def _fmt_dollar(m):
+        raw = m.group(1).replace(',', '')
+        try:
+            n = float(raw)
+            return f'${n:,.0f}' if n >= 1000 else m.group(0)
+        except ValueError:
+            return m.group(0)
+    text = _re.sub(r'\$(\d[\d,]*)', _fmt_dollar, text)
+
+    return text.strip()
 
 
 # ── FIX 4 — Cross-metric contamination filter ────────────────────────────────
@@ -1105,6 +1133,7 @@ def run(
             _bypass_conf = _db_alert_finding.get("confidence", 0.90)
             if metric_definition == "SIMPLE_METRIC":
                 _bypass_conf = max(_bypass_conf, 0.85)
+            _clean_finding = format_financials(_clean_finding)
             log.success(
                 f"run | {_bypass_label} LLM BYPASS | finding='{_clean_finding[:80]}' | "
                 f"metric='{detected_metric}' | conf={_bypass_conf:.2f} | time={_elapsed_ms}ms"
@@ -1258,17 +1287,13 @@ def run(
         multi_row    = multi_row,
     )
 
-    # ── e3. Post-processing cleanup (METRIC and EXPLANATION only) ────────────
-    # WHY skip for DECISION_QUERY?
-    #   DECISION_QUERY output uses **Issue:**, **Recommendation:**, **Risk:**
-    #   as structural section headers. format_financials() strips ALL ** bold
-    #   markers, which would destroy the header formatting that the UI relies
-    #   on to render the structured decision output correctly.
-    # WHY a named function (FIX 7)?
-    #   format_financials() can be called from outside this function
-    #   (e.g. Streamlit UI layer) to sanitise any string before display.
-    if query_type != "DECISION_QUERY":
-        llm_response_text = format_financials(llm_response_text)
+    # ── e3. Post-processing cleanup (ALL query types) ────────────────────────
+    # WHY now safe for DECISION_QUERY?
+    #   The new format_financials() only strips ** bold markers that wrap
+    #   numbers/dollar amounts (**$5,841,000** → $5,841,000). It does NOT
+    #   strip structural headers like **Issue:** or **Recommendation:** because
+    #   those contain word characters, not the digit/$ pattern matched here.
+    llm_response_text = format_financials(llm_response_text)
 
     log.debug(
         f"run | MARKDOWN CLEANUP | bold markers and $ spacing normalised"

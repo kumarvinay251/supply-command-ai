@@ -187,10 +187,12 @@ def resolve_supplier(query: str) -> "str | None":
 #   trigger the dedicated count-query path (Stage 5a) which is already fast.
 
 METRIC_QUERY_KEYWORDS: list[str] = [
-    "highest", "lowest", "what is",
+    "highest", "lowest", "what is", "how much",
     "which supplier", "delay rate",
     "supply chain cost", "expedited cost",
     "on time", "otd", "roi",
+    "shipment value", "average delay", "average shipment",
+    "date span", "invested in", "sla gap", "overall delay",
 ]
 
 # Intents that produce METRIC_QUERY plans — must match _METRIC_INTENTS in create_plan()
@@ -229,6 +231,31 @@ def is_simple_metric_query(query: str, primary_intent: str) -> bool:
         and primary_intent in SIMPLE_METRIC_INTENTS
         and any(kw in q for kw in METRIC_QUERY_KEYWORDS)
     )
+
+
+def extract_time_filter(query: str) -> dict:
+    """
+    Extract an explicit year and/or month from the user query for SQL filtering.
+    Returns {"year": int|None, "month": int|None}.
+    Called at the very start of create_plan() before any intent detection so
+    every DB step in the resulting plan carries the filter.
+    """
+    result = {"year": None, "month": None}
+    year_match = re.search(r'\b(2022|2023|2024)\b', query)
+    if year_match:
+        result["year"] = int(year_match.group())
+    month_map = {
+        "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+        "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+        "january": 1, "february": 2, "march": 3, "april": 4,
+        "june": 6, "july": 7, "august": 8, "september": 9,
+        "october": 10, "november": 11, "december": 12,
+    }
+    for name, num in month_map.items():
+        if name in query.lower():
+            result["month"] = num
+            break
+    return result
 
 
 def classify_intent(query: str) -> dict:
@@ -820,6 +847,12 @@ def create_plan(query: str, role: str) -> dict:
             "role":   role,
         }
 
+    # ── Time filter extraction (must run before ANY intent/template logic) ───
+    # WHY before Stage 3b?
+    #   Both WHATIF and SIMPLE_METRIC do early returns. The filter must be
+    #   extracted once here so all return paths can stamp it onto their steps.
+    time_filter = extract_time_filter(query)
+
     # ── Stage 3b: What-If Simulation Detection ───────────────────────────────
     # WHY detect WHATIF before intent classification?
     #   WHATIF queries are a distinct query type that bypasses all DB/RAG/ROI
@@ -864,6 +897,8 @@ def create_plan(query: str, role: str) -> dict:
             "whatif_entity":   _entity,
             "whatif_metric":   "delay_rate",
             "whatif_target":   _target,
+            "filter_year":     time_filter["year"],
+            "filter_month":    time_filter["month"],
             "created_at":      datetime.now(timezone.utc).isoformat(),
         }
 
@@ -972,6 +1007,27 @@ def create_plan(query: str, role: str) -> dict:
                          "fewest", "bottom"]
 
     _METRIC_TRIGGERS: dict[str, list[str]] = {
+        # ── NEW: sla_gap BEFORE delay_rate so "sla gap" in Q9 matches first ──
+        "sla_gap":             ["sla gap", "sla performance gap", "gap.*sla"],
+        # ── Shipment-value metrics (more specific "average" before generic) ──
+        "avg_shipment_value":  ["average shipment value", "avg shipment value",
+                                "average value per shipment"],
+        "shipment_value":      ["total shipment value", "shipment value",
+                                "value of shipments"],
+        # ── Delay statistics ─────────────────────────────────────────────────
+        "max_delay":           ["maximum delay", "max delay observed",
+                                "max delay"],
+        "avg_delay":           ["average delay days", "average delay for delayed",
+                                "average delay", "avg delay days", "avg delay"],
+        "overall_delay_rate":  ["overall delay rate", "overall delay",
+                                "fleet delay rate", "fleet.*delay rate"],
+        # ── Date span ────────────────────────────────────────────────────────
+        "date_span":           ["shipment date span", "date span", "data span",
+                                "earliest shipment", "latest shipment"],
+        # ── AI investment (before generic "cost") ────────────────────────────
+        "ai_investment":       ["invested in ai", "ai investment",
+                                "money invested in ai", "spent on ai"],
+        # ── Existing metrics ─────────────────────────────────────────────────
         "delay_rate":    ["delay rate", "delay percentage"],
         "otd":           ["otd", "on-time delivery", "on time delivery",
                           "on-time rate", "on time rate"],
@@ -1131,20 +1187,41 @@ def create_plan(query: str, role: str) -> dict:
     if is_simple_metric_query(query, primary_intent):
         # Reuse the same STAGE 5c routing table — no duplication of SQL keys
         _SIMPLE_METRIC_TASK_MAP: dict[tuple, str] = {
+            # ── Delay rate ────────────────────────────────────────────────────
             ("delay_rate", "supplier",         "highest"): "delay_count_by_supplier",
             ("delay_rate", "supplier",         "lowest"):  "lowest_delay_rate_supplier",
             ("delay_rate", "region",           "highest"): "highest_delay_rate_region",
             ("delay_rate", "region",           "lowest"):  "highest_delay_rate_region",
             ("delay_rate", "product_category", "highest"): "highest_delay_rate_product_category",
             ("delay_rate", "product_category", "lowest"):  "highest_delay_rate_product_category",
-            ("delay_rate", "fleet",            "highest"): "delay_count_by_supplier",
+            # fleet-wide delay rate → overall scalar (not per-supplier breakdown)
+            ("delay_rate", "fleet",            "highest"): "overall_delay_rate",
+            # ── Count / fleet ─────────────────────────────────────────────────
             ("total_count", "fleet",           "highest"): "total_shipments",
             ("total_count", "supplier",        "highest"): "total_shipments",
             ("otd",            "fleet",        "highest"): "fleet_otd_vs_benchmark",
+            # ── Financial ────────────────────────────────────────────────────
             ("cost",           "fleet",        "highest"): "total_supply_chain_cost",
             ("roi",            "fleet",        "highest"): "roi_progression",
             ("expedited_cost", "fleet",        "highest"): "total_expedited_cost",
             ("expedited_cost", "supplier",     "highest"): "total_expedited_cost",
+            # ── NEW: shipment value ───────────────────────────────────────────
+            ("shipment_value",     "fleet",    "highest"): "total_shipment_value",
+            ("avg_shipment_value", "fleet",    "highest"): "avg_shipment_value",
+            ("shipment_value",     "supplier", "highest"): "supplier_shipment_value",
+            ("shipment_value",     "region",   "highest"): "region_shipment_value",
+            ("shipment_value",  "product_category", "highest"): "category_shipment_value",
+            # ── NEW: delay statistics ─────────────────────────────────────────
+            ("avg_delay",          "fleet",    "highest"): "avg_delay_days",
+            ("max_delay",          "fleet",    "highest"): "avg_delay_days",
+            ("overall_delay_rate", "fleet",    "highest"): "overall_delay_rate",
+            # ── NEW: date span ────────────────────────────────────────────────
+            ("date_span",          "fleet",    "highest"): "shipment_date_span",
+            # ── NEW: AI investment ────────────────────────────────────────────
+            ("ai_investment",      "fleet",    "highest"): "ai_investment_by_year",
+            # ── NEW: SLA gap (join query) ─────────────────────────────────────
+            ("sla_gap",        "supplier",     "highest"): "sla_gap_by_supplier",
+            ("sla_gap",        "fleet",        "highest"): "sla_gap_by_supplier",
         }
         _avoidable_sm  = detected_metric == "cost" and "avoidable" in query_lower
         _sm_db_task    = (
@@ -1167,7 +1244,10 @@ def create_plan(query: str, role: str) -> dict:
             _sm_allowed   = set(_sm_role.get("allowed_tables", []))
             _sm_db_table  = (
                 "financial_impact"
-                if detected_metric in ("cost", "roi", "expedited_cost")
+                if detected_metric in ("cost", "roi", "expedited_cost",
+                                       "ai_investment")
+                else "suppliers_master"
+                if detected_metric in ("sla_gap",)
                 else "shipments"
             )
             _sm_steps: list[dict] = []
@@ -1187,11 +1267,17 @@ def create_plan(query: str, role: str) -> dict:
                 "requires_human_approval": False,
             })
 
+            # Stamp time filter onto every DB step in the short-circuit plan
+            for _s in _sm_steps:
+                _s["filter_year"]  = time_filter["year"]
+                _s["filter_month"] = time_filter["month"]
+
             log.info(
                 f"create_plan | STAGE 4f SIMPLE METRIC SHORT-CIRCUIT | "
                 f"metric='{detected_metric}' dim='{detected_dimension}' "
                 f"polarity='{detected_polarity}' | db_task='{_sm_db_task}' | "
-                f"steps={len(_sm_steps)} | conf={confidence:.2f}"
+                f"steps={len(_sm_steps)} | conf={confidence:.2f} | "
+                f"filter_year={time_filter['year']} filter_month={time_filter['month']}"
             )
 
             return {
@@ -1215,6 +1301,8 @@ def create_plan(query: str, role: str) -> dict:
                 "human_checkpoints":   [],
                 "skipped_steps":       [],
                 "alert_driven":        False,
+                "filter_year":         time_filter["year"],
+                "filter_month":        time_filter["month"],
                 "created_at":          datetime.now(timezone.utc).isoformat(),
             }
 
@@ -1614,6 +1702,16 @@ def create_plan(query: str, role: str) -> dict:
         1 for s in filtered_steps if s["agent"] == "Executive Agent"
     )
 
+    # ── Stamp time filter onto every step before final return ────────────────
+    # WHY at this point and not earlier?
+    #   filtered_steps is the final step list after all filtering and
+    #   renumbering. Stamping here ensures every DB step that survives
+    #   role-filtering carries the filter regardless of which code path
+    #   produced it (count-query override, Stage 5c override, secondary merge).
+    for _fs in filtered_steps:
+        _fs["filter_year"]  = time_filter["year"]
+        _fs["filter_month"] = time_filter["month"]
+
     # ── Stage 10: Log and Return ──────────────────────────────────────────────
     plan = {
         "status":             "ok",
@@ -1635,6 +1733,8 @@ def create_plan(query: str, role: str) -> dict:
         "estimated_llm_calls": estimated_llm_calls,
         "human_checkpoints":  sorted(human_checkpoints),
         "skipped_steps":      skipped_steps,
+        "filter_year":        time_filter["year"],
+        "filter_month":       time_filter["month"],
         "created_at":         datetime.now(timezone.utc).isoformat(),
     }
 

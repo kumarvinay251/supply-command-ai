@@ -1371,43 +1371,34 @@ def simulate_whatif(
         else:
             target_rate = float(target_value)
 
-        # Guard: target must be less than current rate to be an improvement
-        if target_rate >= current_rate:
-            return {
-                "error": (
-                    f"Target delay rate ({target_rate:.1f}%) is not better than "
-                    f"current rate ({current_rate:.1f}%). "
-                    "Please supply a lower target."
-                )
-            }
-
         # ── Project simulated shipments ───────────────────────────────────────
         simulated_delayed = round(total_ship * target_rate / 100)
-        shipments_saved   = delayed_ship - simulated_delayed
+        shipments_saved   = delayed_ship - simulated_delayed  # negative if worsening
 
-        # ── Estimate cost saving (fleet-apportioned) ──────────────────────────
-        # WHY apportion from financial_impact instead of shipments?
-        #   expedited_cost_usd in shipments is near-zero for some suppliers
-        #   (e.g. SUP003) because costs are recorded fleet-wide in
-        #   financial_impact.expedited_ship_usd. Apportioning by each
-        #   supplier's share of delayed shipments gives a fair per-supplier
-        #   baseline and makes the saving estimate meaningful.
-        #
-        # improvement_ratio: fraction of delay rate eliminated (0.0–1.0)
-        # simulated_expedited_saving: supplier's apportioned cost × reduction %
-        # annual_saving_estimate: 3× the dataset saving (dataset ≈ 4 months)
-        improvement_ratio          = (
-            (current_rate - target_rate) / current_rate
-            if current_rate > 0 else 0.0
-        )
-        simulated_expedited_saving = supplier_expedited * improvement_ratio
-        annual_saving_estimate     = simulated_expedited_saving * 3
-
-        # ── Improvement percentage ────────────────────────────────────────────
-        if current_rate > 0:
-            improvement_pct = (current_rate - target_rate) / current_rate * 100
-        else:
+        # ── Directional simulation — handles both improvement and worsening ───
+        # WHY allow target > current?
+        #   Users legitimately ask "what if delay rate increases to 30%?" to
+        #   stress-test exposure. Returning an error was unhelpful. We now
+        #   show a negative saving (cost increase) when the target is worse.
+        if target_rate > current_rate:
+            direction    = "increase"
+            cost_label   = "Additional cost exposure"
+            ratio        = (target_rate - current_rate) / current_rate if current_rate > 0 else 0.0
+            simulated_expedited_saving = -supplier_expedited * ratio   # negative
+            improvement_pct = (target_rate - current_rate) / current_rate * 100 if current_rate > 0 else 0.0
+        elif target_rate == current_rate:
+            direction    = "no change"
+            cost_label   = "No change"
+            simulated_expedited_saving = 0.0
             improvement_pct = 0.0
+        else:
+            direction    = "improvement"
+            cost_label   = "Estimated cost saving"
+            ratio        = (current_rate - target_rate) / current_rate if current_rate > 0 else 0.0
+            simulated_expedited_saving = supplier_expedited * ratio
+            improvement_pct = (current_rate - target_rate) / current_rate * 100 if current_rate > 0 else 0.0
+
+        annual_saving_estimate = simulated_expedited_saving * 3
 
         # ── Confidence band ───────────────────────────────────────────────────
         # High if 30+ shipments, Medium if 10–29, Low otherwise
@@ -1426,11 +1417,13 @@ def simulate_whatif(
             "simulated_delayed_shipments": simulated_delayed,
             "shipments_saved":             shipments_saved,
             "current_expedited_cost":      f"${supplier_expedited:,.0f}",
-            "estimated_cost_saving":       f"${simulated_expedited_saving:,.0f}",
-            "annual_saving_estimate":      f"${annual_saving_estimate:,.0f}",
+            "estimated_cost_saving":       f"${abs(simulated_expedited_saving):,.0f}",
+            "annual_saving_estimate":      f"${abs(annual_saving_estimate):,.0f}",
             "improvement_pct":             f"{improvement_pct:.1f}%",
             "annual_spend":                format_currency(annual_spend),
             "total_shipments":             total_ship,
+            "direction":                   direction,
+            "cost_label":                  cost_label,
             "confidence":                  confidence,
             "source":                      "What-If Simulation · DB-grounded",
         }
