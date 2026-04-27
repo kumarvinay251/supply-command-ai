@@ -1,0 +1,437 @@
+{
+  "run_at": "2026-04-27T15:36:36.555000",
+  "total": 32,
+  "passed": 32,
+  "failed": 0,
+  "pass_pct": 100,
+  "avg_ms": 563,
+  "p99_ms": 12348,
+  "by_category": {
+    "basic_metrics": {
+      "pass": 8,
+      "fail": 0,
+      "total": 8
+    },
+    "supplier_analysis": {
+      "pass": 6,
+      "fail": 0,
+      "total": 6
+    },
+    "financial": {
+      "pass": 7,
+      "fail": 0,
+      "total": 7
+    },
+    "region_category": {
+      "pass": 4,
+      "fail": 0,
+      "total": 4
+    },
+    "rbac": {
+      "pass": 2,
+      "fail": 0,
+      "total": 2
+    },
+    "whatif": {
+      "pass": 2,
+      "fail": 0,
+      "total": 2
+    },
+    "decision": {
+      "pass": 1,
+      "fail": 0,
+      "total": 1
+    },
+    "formatting": {
+      "pass": 2,
+      "fail": 0,
+      "total": 2
+    }
+  },
+  "results": [
+    {
+      "idx": 1,
+      "query": "how many shipments are delayed",
+      "role": "Operations Manager",
+      "category": "basic_metrics",
+      "passed": true,
+      "answer": "Total delayed shipments: 15 (across 3 supplier(s) and 5 product category/ies).",
+      "confidence": 0.9,
+      "elapsed_ms": 23,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 2,
+      "query": "what is overall delay rate",
+      "role": "Operations Manager",
+      "category": "basic_metrics",
+      "passed": true,
+      "answer": "Overall fleet delay rate: 15.0% (15 delayed of 100 total shipments).",
+      "confidence": 0.9,
+      "elapsed_ms": 2,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 3,
+      "query": "what is total number of shipments",
+      "role": "Operations Manager",
+      "category": "basic_metrics",
+      "passed": true,
+      "answer": "Total fleet: 100 shipments (80 on-time, 15 delayed \u2014 80.0% OTD rate).",
+      "confidence": 0.9,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 4,
+      "query": "what is maximum delay observed",
+      "role": "Operations Manager",
+      "category": "basic_metrics",
+      "passed": true,
+      "answer": "Maximum observed delay is 12 days (across 15 delayed shipments).",
+      "confidence": 0.9,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 5,
+      "query": "what is average delay for delayed shipments",
+      "role": "Operations Manager",
+      "category": "basic_metrics",
+      "passed": true,
+      "answer": "Average delay for delayed shipments: 6.0 days (max 12 days, across 15 delayed shipments).",
+      "confidence": 0.9,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 6,
+      "query": "what is total shipment value",
+      "role": "Operations Manager",
+      "category": "basic_metrics",
+      "passed": true,
+      "answer": "Total shipment value across 100 shipments: $51.06M.",
+      "confidence": 0.9,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 7,
+      "query": "what is average shipment value",
+      "role": "Operations Manager",
+      "category": "basic_metrics",
+      "passed": true,
+      "answer": "Average shipment value: $510,569 (across 100 shipments).",
+      "confidence": 0.9,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 8,
+      "query": "what is the shipment date span",
+      "role": "Operations Manager",
+      "category": "basic_metrics",
+      "passed": true,
+      "answer": "Shipment data spans from 2023-01-08 to 2024-12-17 (100 total shipments).",
+      "confidence": 0.9,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 9,
+      "query": "which supplier has highest delay rate",
+      "role": "Operations Manager",
+      "category": "supplier_analysis",
+      "passed": true,
+      "answer": "SUP003 has the highest delay rate at 20.0% (avg 5.0 days per delay) across 30 shipments. All supplier delay rates: SUP003: 20.0% delay rate (6/30 shipments delayed); SUP001: 19.4% delay rate (7/36 shipments delayed); SUP002: 5.9% delay rate (2/34 shipments delayed).",
+      "confidence": 0.85,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 10,
+      "query": "which supplier has lowest delay rate",
+      "role": "Operations Manager",
+      "category": "supplier_analysis",
+      "passed": true,
+      "answer": "SUP002 has the lowest delay rate at 5.9% (avg 2.2 days per delay) across 34 shipments.",
+      "confidence": 0.9,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 11,
+      "query": "which supplier has highest shipment value",
+      "role": "Operations Manager",
+      "category": "supplier_analysis",
+      "passed": true,
+      "answer": "Shipment value by supplier \u2014 SUP001: $30.31M (59.4%); SUP002: $14.19M (27.8%); SUP003: $6.56M (12.8%). Highest: SUP001 at $30.31M.",
+      "confidence": 0.9,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 12,
+      "query": "what is delay rate for sup003",
+      "role": "Operations Manager",
+      "category": "supplier_analysis",
+      "passed": true,
+      "answer": "SUP003 has the highest delay rate at 20.0% (avg 5.0 days per delay) across 30 shipments. All supplier delay rates: SUP003: 20.0% delay rate (6/30 shipments delayed); SUP001: 19.4% delay rate (7/36 shipments delayed); SUP002: 5.9% delay rate (2/34 shipments delayed).",
+      "confidence": 0.85,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 13,
+      "query": "what is sla target for sup003",
+      "role": "Operations Manager",
+      "category": "supplier_analysis",
+      "passed": true,
+      "answer": "The SLA target for SUP003 is 88.0%. SUP003 currently has an overall on-time delivery (OTD) rate of 73.3%, which is 14.7% below its target.\nSources: shipments / suppliers_master / financial_impact (SQLite)  \nConfidence: 60%",
+      "confidence": 0.7,
+      "elapsed_ms": 5423,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 14,
+      "query": "compare delay rate across all suppliers",
+      "role": "Operations Manager",
+      "category": "supplier_analysis",
+      "passed": true,
+      "answer": "SUP003 has the highest delay rate at 20.0% (avg 5.0 days per delay) across 30 shipments. All supplier delay rates: SUP003: 20.0% delay rate (6/30 shipments delayed); SUP001: 19.4% delay rate (7/36 shipments delayed); SUP002: 5.9% delay rate (2/34 shipments delayed).",
+      "confidence": 0.85,
+      "elapsed_ms": 33,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 15,
+      "query": "what is total supply chain cost",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Total supply chain cost 2022\u20132024: $17,443,000 (avg $484,528/month across 36 months).",
+      "confidence": 0.9,
+      "elapsed_ms": 6,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 16,
+      "query": "what is total sc cost for 2022",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Total supply chain cost 2022\u20132022: $5,763,000 (avg $480,250/month across 12 months).",
+      "confidence": 0.9,
+      "elapsed_ms": 12,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 17,
+      "query": "what is 2024 expedited shipping cost",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Total expedited shipping cost is $39,797.",
+      "confidence": 0.9,
+      "elapsed_ms": 4,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 18,
+      "query": "what is total avoidable cost in 2024",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Total avoidable costs 2024\u20132024: $623,297 (expedited freight: $39,797 stockout losses: $209,300 delay penalties: $86,800).",
+      "confidence": 0.9,
+      "elapsed_ms": 9,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 19,
+      "query": "what is 2024 ai roi",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Latest ROI: 340% as of Dec-2024. Cumulative AI savings: $401,000.",
+      "confidence": 0.85,
+      "elapsed_ms": 15,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 20,
+      "query": "how much did ai save in 2024",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "AI investment by year \u2014 2024: invested $94,000 saved $401,000. Total invested: $94,000.",
+      "confidence": 0.9,
+      "elapsed_ms": 14,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 21,
+      "query": "what is roi of ai investment",
+      "role": "CFO",
+      "category": "financial",
+      "passed": true,
+      "answer": "Latest ROI: 340% as of Dec-2024. Cumulative AI savings: $401,000.",
+      "confidence": 0.85,
+      "elapsed_ms": 84,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 22,
+      "query": "which region has highest delay rate",
+      "role": "Operations Manager",
+      "category": "region_category",
+      "passed": true,
+      "answer": "Highest delay rate by region: South at 23.7% (9 delayed of 38 total shipments). All regions: South 23.7%, North 11.1%, West 8.6%.",
+      "confidence": 0.85,
+      "elapsed_ms": 3,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 23,
+      "query": "which region contributes most to delays",
+      "role": "Operations Manager",
+      "category": "region_category",
+      "passed": true,
+      "answer": "Highest delay rate by region: South at 23.7% (9 delayed of 38 total shipments). All regions: South 23.7%, North 11.1%, West 8.6%.",
+      "confidence": 0.85,
+      "elapsed_ms": 9,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 24,
+      "query": "which category has highest delay rate",
+      "role": "Operations Manager",
+      "category": "region_category",
+      "passed": true,
+      "answer": "Highest delay rate by product category: PPE at 21.1% (4 delayed of 19 total shipments). All categories: PPE 21.1%, Diagnostic Equipment 17.9%, Surgical Instruments 13.6%, Consumables 10.5%, Implants 8.3%.",
+      "confidence": 0.85,
+      "elapsed_ms": 5,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 25,
+      "query": "what is total shipment value by region",
+      "role": "Operations Manager",
+      "category": "region_category",
+      "passed": true,
+      "answer": "Shipment value by region \u2014 North: $20.10M; South: $17.15M; West: $13.80M. Highest: North at $20.10M.",
+      "confidence": 0.9,
+      "elapsed_ms": 3,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 26,
+      "query": "what is total supply chain cost",
+      "role": "Demand Planner",
+      "category": "rbac",
+      "passed": true,
+      "answer": "Access restricted. Financial data requires Operations Manager or CFO role.",
+      "confidence": 0.0,
+      "elapsed_ms": 0,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 27,
+      "query": "what is 2024 ai roi",
+      "role": "Demand Planner",
+      "category": "rbac",
+      "passed": true,
+      "answer": "Access restricted. Financial data requires Operations Manager or CFO role.",
+      "confidence": 0.0,
+      "elapsed_ms": 0,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 28,
+      "query": "what if sup003 delay rate drops to 10%",
+      "role": "Operations Manager",
+      "category": "whatif",
+      "passed": true,
+      "answer": "\ud83d\udcca **What-If Simulation \u2014 SupplierC (SUP003)**\n\n**Current State**\n  \u2022 Delay rate:             20.00%\n  \u2022 Delayed shipments:      6 of 30\n  \u2022 Expedited cost (actual):$151,999\n\n**Simulated State (target: 10.00%)**\n  \u2022 Delayed shipments:      3 (\u22123 shipments)\n  \u2022 Estimated cost saving:  $75,999\n  \u2022 Annu",
+      "confidence": 0.85,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 29,
+      "query": "what if delay rate increases to 30%",
+      "role": "Operations Manager",
+      "category": "whatif",
+      "passed": true,
+      "answer": "\ud83d\udcca **What-If Simulation \u2014 All Suppliers (Fleet)**\n\n**Current State**\n  \u2022 Delay rate:             15.00%\n  \u2022 Delayed shipments:      15 of 100\n  \u2022 Expedited cost (actual):$379,997\n\n**Simulated State (target: 30.00%)**\n  \u2022 Delayed shipments:      30 (+15 more shipments)\n  \u2022 Additional cost exposure:  $",
+      "confidence": 0.85,
+      "elapsed_ms": 0,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 30,
+      "query": "should we terminate sup003",
+      "role": "Operations Manager",
+      "category": "decision",
+      "passed": true,
+      "answer": "**Issue:** SUP003 has the highest delay rate at 20.0%, significantly impacting overall supply chain performance.\n\n**Supporting Evidence:** The delay rate for SUP003 is 20.0%, with an average delay of 5.0 days per shipment across 30 shipments (Source: shipments / suppliers_master / financial_impact).",
+      "confidence": 0.7298,
+      "elapsed_ms": 12348,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 31,
+      "query": "which supplier has highest shipment value",
+      "role": "Operations Manager",
+      "category": "formatting",
+      "passed": true,
+      "answer": "Shipment value by supplier \u2014 SUP001: $30.31M (59.4%); SUP002: $14.19M (27.8%); SUP003: $6.56M (12.8%). Highest: SUP001 at $30.31M.",
+      "confidence": 0.9,
+      "elapsed_ms": 11,
+      "missing": [],
+      "found_bad": []
+    },
+    {
+      "idx": 32,
+      "query": "what is total avoidable cost in 2024",
+      "role": "CFO",
+      "category": "formatting",
+      "passed": true,
+      "answer": "Total avoidable costs 2024\u20132024: $623,297 (expedited freight: $39,797 stockout losses: $209,300 delay penalties: $86,800).",
+      "confidence": 0.9,
+      "elapsed_ms": 2,
+      "missing": [],
+      "found_bad": []
+    }
+  ]
+}
