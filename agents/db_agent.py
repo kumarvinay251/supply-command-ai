@@ -1294,21 +1294,18 @@ def interpret_result(task: str, data: list[dict]) -> dict:
         avg_str    = (
             f" (avg {avg_days:.1f} days per delay)" if avg_days else ""
         )
-        # WHY include all suppliers in the finding, not just row 0?
-        #   Alert-driven entity queries (e.g. "What is SUP001 delay rate?")
-        #   need the specific supplier's data in the finding so the Executive
-        #   Agent can cite it. Row 0 is SUP003 (worst), but the user may ask
-        #   about SUP001. Including all rows lets the LLM find the right entity.
-        per_supplier_lines = [
-            f"{r.get('supplier_id', '?')}: {r.get('delay_rate_pct', '?')}% delay rate "
-            f"({r.get('delayed_count', 0)}/{r.get('total_shipments', 0)} shipments delayed)"
-            for r in data
-        ]
+        # WHY only the top supplier, no "All supplier delay rates:" appendix?
+        #   Comparison queries ("compare delay rate across all suppliers") now
+        #   route to supplier_delay_comparison which returns a clean numbered
+        #   ranked list. delay_count_by_supplier is exclusively used for
+        #   single-answer queries ("which supplier has the highest delay rate?")
+        #   where one clear answer is expected — not a full breakdown table.
+        #   Removing the appendix prevents the extra table from appearing when
+        #   the user asked for a single-supplier answer.
         finding = (
             f"{top.get('supplier_id', 'Unknown')} has the highest delay rate "
             f"at {key_metric}%{avg_str} across "
-            f"{top.get('total_shipments', 0)} shipments. "
-            f"All supplier delay rates: {'; '.join(per_supplier_lines)}."
+            f"{top.get('total_shipments', 0)} shipments."
         )
         if row_count < 3:
             caveat = "Fewer than 3 suppliers found — comparison is limited."

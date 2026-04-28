@@ -1014,7 +1014,9 @@ def create_plan(query: str, role: str) -> dict:
         "avg_shipment_value":  ["average shipment value", "avg shipment value",
                                 "average value per shipment"],
         "shipment_value":      ["total shipment value", "shipment value",
-                                "value of shipments"],
+                                "value of shipments", "carries the most",
+                                "most value", "highest value",
+                                "value by supplier", "shipment worth"],
         # ── Delay statistics ─────────────────────────────────────────────────
         "max_delay":           ["maximum delay", "max delay observed",
                                 "max delay"],
@@ -1230,14 +1232,36 @@ def create_plan(query: str, role: str) -> dict:
             ("sla_gap",        "supplier",     "highest"): "sla_gap_by_supplier",
             ("sla_gap",        "fleet",        "highest"): "sla_gap_by_supplier",
         }
-        _avoidable_sm  = detected_metric == "cost" and "avoidable" in query_lower
-        _sm_db_task    = (
-            "total_avoidable_cost"
-            if _avoidable_sm
-            else _SIMPLE_METRIC_TASK_MAP.get(
-                (detected_metric, detected_dimension, detected_polarity)
+        # ── Comparison queries: route to supplier_delay_comparison ───────────
+        # WHY check BEFORE _SIMPLE_METRIC_TASK_MAP?
+        #   "Compare delay rate across all suppliers" shares the same
+        #   (delay_rate, supplier, highest) triple as "which supplier has the
+        #   highest delay rate?" — both would map to delay_count_by_supplier,
+        #   returning only the top row. Comparison queries need ALL suppliers
+        #   ranked via supplier_delay_comparison.  Checking here overrides the
+        #   map before it is consulted, preserving all other routes unchanged.
+        # WHY only when detected_dimension == "supplier"?
+        #   Region/category comparisons use multi-row templates that already
+        #   return all rows (highest_delay_rate_region etc.) — no override needed.
+        _COMPARISON_TRIGGERS_SM = [
+            "compare", "comparison", "vs", "versus",
+            "across all", "all suppliers", "breakdown",
+        ]
+        _is_comparison_sm = any(kw in query_lower for kw in _COMPARISON_TRIGGERS_SM)
+
+        if _is_comparison_sm and detected_dimension == "supplier":
+            _sm_db_task   = "supplier_delay_comparison"
+            _sm_multi_row = True
+        else:
+            _sm_multi_row  = False
+            _avoidable_sm  = detected_metric == "cost" and "avoidable" in query_lower
+            _sm_db_task    = (
+                "total_avoidable_cost"
+                if _avoidable_sm
+                else _SIMPLE_METRIC_TASK_MAP.get(
+                    (detected_metric, detected_dimension, detected_polarity)
+                )
             )
-        )
         # If no exact template found, fall back to full investigation plan
         if _sm_db_task is None:
             log.info(
@@ -1299,7 +1323,7 @@ def create_plan(query: str, role: str) -> dict:
                 "detected_dimension":  detected_dimension,
                 "detected_polarity":   detected_polarity,
                 "detected_entity":     detected_entity,
-                "multi_row":           False,
+                "multi_row":           _sm_multi_row,
                 "confidence":          confidence,
                 "keywords_matched":    intent_result["keywords_matched"],
                 "steps":               _sm_steps,

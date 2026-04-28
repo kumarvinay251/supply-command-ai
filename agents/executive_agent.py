@@ -1135,9 +1135,14 @@ def run(
                 # WHY use actual alert_driven flag instead of hardcoded True?
                 #   alert_driven=True enforces 1-sentence limit (exact metric).
                 #   SIMPLE_METRIC bypasses are NOT alert-driven — they should
-                #   allow 2 sentences so multi-entity findings (e.g. all-supplier
-                #   comparison) keep the "All supplier delay rates:" second sentence.
+                #   allow 2 sentences so multi-entity findings keep context.
                 alert_driven = alert_driven,
+                # WHY forward multi_row here?
+                #   supplier_delay_comparison findings are numbered multi-line
+                #   lists. Without multi_row=True the sentence-splitter fires on
+                #   "1. " and "2. " delimiters, truncating suppliers 2 and 3.
+                #   multi_row=True passes the full ranked list through unchanged.
+                multi_row    = multi_row,
             )
             _elapsed_ms = int((time.perf_counter() - start_time) * 1000)
             _bypass_label = "ALERT" if alert_driven else metric_definition
