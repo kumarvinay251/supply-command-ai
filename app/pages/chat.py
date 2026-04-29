@@ -82,7 +82,9 @@ def _render_agent_trace(result: dict) -> None:
     cost_usd     = result.get("cost_usd", 0.0)
     exec_ms      = result.get("execution_time_ms", 0)
     groundedness = result.get("groundedness_score", 1.0)
-    plan_text    = result.get("plan_explanation", "")
+    # FIX 8: strip HTML tags from plan_text before it is interpolated into
+    # an unsafe_allow_html block — prevents injected tags from being rendered.
+    plan_text    = clean_trace_text(result.get("plan_explanation", ""))
 
     # ── Planning Agent is always first ───────────────────────────────────────
     all_agents = ["planning_agent"] + [a for a in agents_used if a != "planning_agent"]
@@ -208,10 +210,13 @@ def _render_answer(result: dict, msg_index: int = 0) -> None:
             f"**Impact:** {impact_summary}",
         )
 
-        col_approve, col_escalate, _ = st.columns([1, 1, 3])
+        col_approve, col_reject, col_escalate, _ = st.columns([1, 1, 1, 2])
         with col_approve:
             if st.button("✅ Approve", key=f"approve_{msg_index}", type="primary"):
                 st.success("Approval recorded. Proceeding with recommendation.")
+        with col_reject:
+            if st.button("❌ Reject", key=f"reject_{msg_index}"):
+                st.error("Action rejected. No changes will be made.")
         with col_escalate:
             if st.button("🔼 Escalate", key=f"escalate_{msg_index}"):
                 st.info("Escalated to Senior Management. Notification sent.")

@@ -466,7 +466,105 @@ def execute_step_node(state: AgentState) -> dict:
     }
 
 
-# ── Node 4: Executive ─────────────────────────────────────────────────────────
+# ── Node 4a: Human-in-the-Loop Gate ──────────────────────────────────────────
+#
+# WHY a dedicated graph node and not just logic inside executive_node?
+#   Placing the approval gate as a named graph node makes it visible and
+#   auditable in the LangGraph topology. Any observer of the compiled graph
+#   can see that DECISION_QUERY flows through "human_in_loop" before reaching
+#   "executive". This also opens the door to LangGraph's native interrupt()
+#   mechanism for true async approval workflows in future.
+#
+# WHY here (after execute_step, before executive)?
+#   We need the specialist agent findings to be present so the approval
+#   message can reference them (confidence, entity context). Running before
+#   execute_step would leave the findings list empty.
+
+_DECISION_ACTION_KEYWORDS: list[str] = [
+    "terminate", "cancel", "switch", "replace", "drop", "remove",
+    "suspend", "audit", "change supplier", "stop using",
+]
+
+
+def human_in_loop_node(state: AgentState) -> dict:
+    """
+    Gate node: intercepts DECISION_QUERY with high-impact action keywords
+    and returns an approval-required answer WITHOUT calling the LLM.
+
+    For all other query types (or DECISION_QUERY without an action keyword),
+    this node is a pass-through — it returns {} so the state is unchanged
+    and execution proceeds normally to executive_node.
+
+    Returns:
+        {"final_answer": dict}  if approval is required  → routes to END
+        {}                      otherwise                 → routes to executive
+    """
+    plan  = state.get("plan", {})
+    query = state.get("query", "")
+
+    if plan.get("query_type") != "DECISION_QUERY":
+        return {}   # pass-through for non-decision queries
+
+    query_lower    = query.lower()
+    action_detected = any(kw in query_lower for kw in _DECISION_ACTION_KEYWORDS)
+
+    if not action_detected:
+        return {}   # no high-impact action keyword → proceed to executive
+
+    # ── DECISION_QUERY with action keyword — pause pipeline ───────────────────
+    findings     = state.get("findings", [])
+    avg_conf     = (
+        sum(f.get("confidence", 0.0) for f in findings) / len(findings)
+        if findings else 0.0
+    )
+
+    log.warning(
+        f"human_in_loop_node | PAUSED — approval required | "
+        f"query='{query[:60]}'"
+    )
+
+    early_answer = {
+        "answer": (
+            f"⚠️ This decision requires human approval before any action is taken.\n\n"
+            f"**Query:** {query}\n\n"
+            f"**Reason:** Decision queries with high-impact actions (terminate, cancel, "
+            f"replace, switch) require manager sign-off before execution.\n\n"
+            f"Please review the findings and use Approve, Reject, or Escalate below."
+        ),
+        "human_approval_required": True,
+        "approval_reason": (
+            "Decision query with high-impact action keyword detected. "
+            "Requires manager authorisation."
+        ),
+        "impact_summary": (
+            "Supplier termination or contract change may disrupt supply chain continuity."
+        ),
+        "sources":           [],
+        "confidence":        avg_conf,
+        "sql_shown":         [],
+        "agents_used":       ["human_in_loop"],
+        "groundedness_score": 1.0,
+        "tokens_used":       0,
+        "cost_usd":          0.0,
+        "execution_time_ms": 0,
+        "warnings":          [],
+    }
+    return {"final_answer": early_answer}
+
+
+def _route_after_human_in_loop(state: AgentState) -> str:
+    """
+    Route to END if human_in_loop_node set an approval-required final_answer,
+    otherwise proceed to executive_node.
+    """
+    final = state.get("final_answer") or {}
+    if final.get("human_approval_required"):
+        log.info("_route_after_human_in_loop | approval required → END")
+        return "end"
+    return "executive"
+
+
+# ── Node 4b: Whatif ───────────────────────────────────────────────────────────
 
 def whatif_node(state: AgentState) -> dict:
     """
@@ -709,6 +807,7 @@ def build_graph() -> "CompiledGraph":  # type: ignore[name-defined]
     builder.add_node("planner",          planner_node)
     builder.add_node("whatif",           whatif_node)
     builder.add_node("execute_step",     execute_step_node)
+    builder.add_node("human_in_loop",    human_in_loop_node)
     builder.add_node("executive",        executive_node)
 
     # ── Entry point ───────────────────────────────────────────────────────────
@@ -741,13 +840,23 @@ def build_graph() -> "CompiledGraph":  # type: ignore[name-defined]
     # ── Whatif → end (no executive needed — answer already formatted) ─────────
     builder.add_edge("whatif", END)
 
-    # ── Execute step → loop until all steps done, then executive ──────────────
+    # ── Execute step → loop until all steps done, then human-in-loop gate ───────
     builder.add_conditional_edges(
         "execute_step",
         _route_after_step,
         {
-            "more_steps": "execute_step",  # self-loop: run next step
-            "done":       "executive",     # all steps done → format answer
+            "more_steps": "execute_step",   # self-loop: run next step
+            "done":       "human_in_loop",  # all steps done → approval gate
+        },
+    )
+
+    # ── Human-in-loop → END (paused) or executive (pass-through) ─────────────
+    builder.add_conditional_edges(
+        "human_in_loop",
+        _route_after_human_in_loop,
+        {
+            "end":       END,         # approval required — no LLM call
+            "executive": "executive", # pass-through — proceed to LLM
         },
     )
 

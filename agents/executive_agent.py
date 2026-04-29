@@ -198,25 +198,37 @@ def format_whatif_output(sim: dict) -> str:
 
     if direction == "increase":
         shipment_line  = f"{sim['simulated_delayed_shipments']} (+{abs(saved)} more shipments)"
-        direction_line = f"**⚠️ Worsening:** {_imp_pct} increase in delay rate"
+        direction_line = f"⚠️ Worsening: {_imp_pct} increase in delay rate"
     else:
         shipment_line  = f"{sim['simulated_delayed_shipments']} (−{abs(saved)} shipments)"
-        direction_line = f"**Improvement:** {_imp_pct} reduction in delay rate"
+        direction_line = f"Improvement: {_imp_pct} reduction in delay rate"
 
-    return (
+    # WHY build the string then escape $ at the end?
+    #   Dollar values come from roi_agent dict fields (e.g. "$45,230").
+    #   Streamlit renders bare $ as LaTeX delimiters causing line breaks or
+    #   blank output. Escaping once at the return boundary is simpler and
+    #   safer than touching each individual field value.
+    # WHY remove leading spaces before bullets?
+    #   "  • Delay rate:" rendered in Streamlit markdown strips leading spaces
+    #   inconsistently.  A clean "• Delay rate:" is guaranteed to be on its
+    #   own line and renders identically across all Streamlit themes.
+    raw = (
         f"📊 **What-If Simulation — {entity_label}**\n\n"
         f"**Current State**\n"
-        f"  • Delay rate:             {sim['current_value']}\n"
-        f"  • Delayed shipments:      {sim['current_delayed_shipments']} of {sim['total_shipments']}\n"
-        f"  • Expedited cost (actual):{sim['current_expedited_cost']}\n\n"
+        f"• Delay rate: {sim['current_value']}\n"
+        f"• Delayed shipments: {sim['current_delayed_shipments']} of {sim['total_shipments']}\n"
+        f"• Expedited cost (actual): {sim['current_expedited_cost']}\n\n"
         f"**Simulated State (target: {sim['target_value']})**\n"
-        f"  • Delayed shipments:      {shipment_line}\n"
-        f"  • {cost_label}:  {sim['estimated_cost_saving']}\n"
-        f"  • Annual projection:      {sim['annual_saving_estimate']}\n\n"
+        f"• Delayed shipments: {shipment_line}\n"
+        f"• {cost_label}: {sim['estimated_cost_saving']}\n"
+        f"• Annual projection: {sim['annual_saving_estimate']}\n\n"
         f"{direction_line}\n"
         f"**Annual Spend at Risk:** {sim['annual_spend']}\n\n"
         f"_Confidence: {sim['confidence']} · Source: {sim['source']}_"
     )
+    # Escape $ → \$ so Streamlit renders literal dollar signs (same escaping
+    # that format_financials() applies to LLM-generated answers).
+    return raw.replace("$", r"\$")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -279,6 +291,67 @@ def trim_decision_output(text: str) -> str:
     return text
 
 
+def strip_recommendation_block(text: str) -> str:
+    """
+    Remove unsolicited recommendation / action-item blocks from non-DECISION answers.
+
+    WHY strip here and not just remove rule 10 from the prompt?
+        The LLM may still append a recommendation even when rule 10 is absent,
+        because role personas (e.g. Operations Manager) instruct the model to
+        "end with recommended actions ranked by priority."  A post-processing
+        pass gives a hard guarantee: EXPLANATION_QUERY and METRIC_QUERY answers
+        never contain recommendation paragraphs.
+
+    Trigger phrases — cut text at the FIRST match:
+        • "To address these"
+        • "The following actions"
+        • "Actions recommended"
+        • "ranked by priority"
+        • "Recommended actions"
+
+    Args:
+        text: Raw LLM response (any query type — caller must guard).
+
+    Returns:
+        Text truncated just before the first recommendation trigger, or the
+        original text if no trigger is found.
+    """
+    import re as _re_rec
+    triggers = [
+        "To address these",
+        "To address",
+        "The following actions",
+        "Actions recommended",
+        "ranked by priority",
+        "Recommended actions",
+        "Recommended",
+    ]
+    # Also strip numbered-paragraph openings at the start of a line
+    # ("1.", "2.", "3." as the first non-space characters on a line)
+    # which signal an action-plan list appended by the LLM.
+    _numbered_match = _re_rec.search(r'(?m)^\s*[1-3]\.\s+\S', text)
+    if _numbered_match:
+        # Only strip if it appears after at least one sentence of real content
+        # (avoid stripping a numbered list that IS the answer, e.g. "3 suppliers")
+        _num_pos = _numbered_match.start()
+        if _num_pos > 80:  # at least 80 chars of answer before the list
+            triggers = triggers  # will be caught below; set numbered pos
+            _numbered_earliest = _num_pos
+        else:
+            _numbered_earliest = len(text)
+    else:
+        _numbered_earliest = len(text)
+    earliest_idx = min(len(text), _numbered_earliest)
+    for trigger in triggers:
+        # Case-insensitive search so the LLM's capitalisation variance is handled
+        match = _re_rec.search(_re_rec.escape(trigger), text, _re_rec.IGNORECASE)
+        if match and match.start() < earliest_idx:
+            earliest_idx = match.start()
+    if earliest_idx < len(text):
+        return text[:earliest_idx].strip()
+    return text
+
+
 def format_financials(text: str) -> str:
     """
     Post-process any answer string to clean up number and financial formatting.
@@ -294,6 +367,9 @@ def format_financials(text: str) -> str:
            (preserves **Issue:** and other structural section headers).
         5. Collapse "$ 1,234" artefact → "$1,234".
         6. Re-format raw $number strings to ensure comma thousands separators.
+        7. Remove any remaining bare * characters (stray markdown artefacts).
+        8. Escape $ as \\$ so Streamlit renders literal dollar signs instead
+           of treating them as LaTeX math delimiters.
     """
     import re as _re
     if not text:
@@ -324,6 +400,12 @@ def format_financials(text: str) -> str:
         except ValueError:
             return m.group(0)
     text = _re.sub(r'\$(\d[\d,]*)', _fmt_dollar, text)
+
+    # 7. Remove stray bare * characters (leftover markdown bold artefacts)
+    text = text.replace('*', '')
+
+    # 8. Escape $ → \$ so Streamlit doesn't treat it as a LaTeX delimiter
+    text = text.replace('$', r'\$')
 
     return text.strip()
 
@@ -552,6 +634,10 @@ def build_prompt(
   Look carefully through ALL evidence chunks — the benchmark table appears after
   introductory text. If no RAG finding contains a benchmark percentage, write
   "The industry benchmark data was not retrieved from the knowledge base."
+• For EXPLANATION_QUERY: provide only the factual comparison requested.
+  Do NOT add recommendations, action plans, or priority lists.
+  Do NOT suggest next steps. Do NOT include "To address..." paragraphs.
+  Answer in 3–5 sentences maximum. State the metric, the benchmark, and the gap only.
 
 """
 
@@ -570,7 +656,7 @@ You help {role} understand supply chain performance and make better decisions.
 7. Avoid: {persona['avoid']}
 8. Tone: {persona['tone']}
 9. Length: {persona['length']}
-10. End every response with one clear next-step recommendation.
+10. {"End every response with one clear next-step recommendation." if query_type == "DECISION_QUERY" else "Do NOT append recommendations, action plans, or next-step suggestions. Provide the analysis only — the decision remains with the human."}
 11. Do NOT use markdown bold (**) around numbers, dollar amounts, or percentages.
     Write all figures in plain text only (e.g. write $5,841,000 not **$5,841,000**).
 
@@ -940,31 +1026,37 @@ def run(
         "recommended_action": _approval_text,
     })
 
-    # For DECISION_QUERY: capture the approval flag but continue to LLM call.
-    # WHY not early-return for DECISION_QUERY?
-    #   A decision query needs a structured answer (Issue/Recommendation/Risk)
-    #   even when human approval is required — the LLM formats the context the
-    #   human will review. Early-returning only the approval message leaves the
-    #   human with no information to review. The approval flag is passed to the
-    #   prompt so the LLM includes the notice in the Risk section.
-    # For non-DECISION_QUERY: keep the early-return behaviour — a metric or
-    #   explanation query that somehow triggers approval (e.g. high-risk action
-    #   in recommendation field) should halt before LLM for safety.
+    # For ALL query types: when human approval is required, early-return
+    # WITHOUT calling the LLM.  This applies to DECISION_QUERY as well.
+    #
+    # WHY change from "continue to LLM for DECISION_QUERY"?
+    #   FIX 3 requirement: the pipeline must PAUSE before the LLM for ANY
+    #   approval-needed query. Generating an automated recommendation and then
+    #   saying "get approval" creates anchoring bias — the human is influenced
+    #   by the AI suggestion even before reviewing the underlying data.
+    #   Returning only the approval gate (with the original query for context)
+    #   forces the human to form their own view before seeing a recommendation.
+    #
+    # WHY include the original query in the answer?
+    #   The approval message is shown in the chat UI. Including the query
+    #   text ensures the reviewer knows exactly what action was requested and
+    #   which entity (e.g. SUP003) is involved — without needing an LLM.
     human_approval_required = approval_check["needs_approval"]
 
-    if human_approval_required and query_type != "DECISION_QUERY":
+    if human_approval_required:
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
         log.warning(
-            f"run | HUMAN APPROVAL REQUIRED (non-DECISION_QUERY) | "
-            f"reason='{approval_check['reason']}'"
+            f"run | HUMAN APPROVAL REQUIRED — pipeline paused (no LLM call) | "
+            f"query_type='{query_type}' | reason='{approval_check['reason']}'"
         )
         return {
             "answer": (
-                f"⚠️ This action requires human approval before proceeding.\n\n"
-                f"Reason: {approval_check['reason']}\n"
-                f"Impact: {approval_check['impact_summary']}\n\n"
-                f"Please review the findings with your manager and confirm "
-                f"before any supply chain action is taken."
+                f"⚠️ This decision requires human approval before any action is taken.\n\n"
+                f"**Query:** {query}\n\n"
+                f"**Reason:** {approval_check['reason']}\n"
+                f"**Impact:** {approval_check['impact_summary']}\n\n"
+                f"Please review with your manager and use the Approve, Reject, or Escalate "
+                f"buttons below before any supply chain action is taken."
             ),
             "sources":                  _collect_sources(clean_findings),
             "confidence":               avg_confidence,
@@ -979,12 +1071,6 @@ def run(
             "execution_time_ms":        elapsed_ms,
             "warnings":                 warnings,
         }
-
-    if human_approval_required:
-        log.warning(
-            f"run | HUMAN APPROVAL REQUIRED (DECISION_QUERY — continuing to LLM) | "
-            f"reason='{approval_check['reason']}'"
-        )
 
     # ── c2. Filter findings by active metric (METRIC_QUERY only) ─────────────
     # WHY filter here, not earlier?
@@ -1319,6 +1405,22 @@ def run(
     log.debug(
         f"run | MARKDOWN CLEANUP | bold markers and $ spacing normalised"
     )
+
+    # ── e3b. Strip unsolicited recommendation blocks (non-DECISION only) ─────
+    # WHY strip here in addition to the prompt rule change?
+    #   The LLM ignores instructions intermittently, especially for Operations
+    #   Manager persona which has "end with recommended actions ranked by
+    #   priority" baked into its format string. A hard post-processing pass
+    #   guarantees EXPLANATION_QUERY and METRIC_QUERY answers never contain
+    #   recommendation paragraphs regardless of LLM compliance.
+    if query_type != "DECISION_QUERY":
+        before = len(llm_response_text)
+        llm_response_text = strip_recommendation_block(llm_response_text)
+        if len(llm_response_text) < before:
+            log.info(
+                f"run | STRIP_REC | recommendation block removed "
+                f"({before - len(llm_response_text)} chars stripped)"
+            )
 
     # ── f. Validate LLM output groundedness ──────────────────────────────────
     validation = validate_llm_output(llm_response_text, clean_findings)

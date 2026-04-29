@@ -601,14 +601,32 @@ def get_plan_template(intent: str) -> list[dict]:
         #   directly from the two DB and RAG findings without a separate step.
         "BENCHMARK_COMPARISON": [
             {
+                # WHY fleet OTD scalar FIRST?
+                #   fleet_otd_vs_benchmark returns the single unambiguous
+                #   shipment-weighted fleet OTD (e.g. 80.0%) that the executive
+                #   must quote. Using only supplier_sla_performance forces a
+                #   weighted-average recomputation in interpret_result — the
+                #   direct scalar is more reliable and cannot drift.
                 "step_number":             1,
+                "agent":                   "DB Agent",
+                "task":                    "fleet_otd_vs_benchmark — get fleet OTD scalar vs industry benchmark",
+                "table":                   "shipments",
+                "requires_human_approval": False,
+            },
+            {
+                # WHY per-supplier OTD second?
+                #   The executive needs SUP002 OTD (94.1%) and other supplier-level
+                #   OTD figures to provide the full comparison context.
+                #   supplier_sla_performance gives actual_otd_pct and sla_gap_pct
+                #   per supplier — the fleet level comes from step 1.
+                "step_number":             2,
                 "agent":                   "DB Agent",
                 "task":                    "Get actual OTD performance vs SLA target from suppliers_master — actual_otd_pct, sla_target_pct, sla_gap for each supplier",
                 "table":                   "suppliers_master",
                 "requires_human_approval": False,
             },
             {
-                "step_number":             2,
+                "step_number":             3,
                 "agent":                   "RAG Agent",
                 "task":                    "Retrieve industry benchmark KPIs from the GlobalMedTech Annual Report PDF",
                 # WHY separate instruction from task here?
@@ -624,9 +642,9 @@ def get_plan_template(intent: str) -> list[dict]:
                 "requires_human_approval": False,
             },
             {
-                "step_number":             3,
+                "step_number":             4,
                 "agent":                   "Executive Agent",
-                "task":                    "Format benchmark comparison with gap analysis for the user's role",
+                "task":                    "Format benchmark comparison with fleet OTD, industry benchmark, gap, and per-supplier OTD for the user's role",
                 "table":                   None,
                 "requires_human_approval": False,
             },
@@ -872,8 +890,13 @@ def create_plan(query: str, role: str) -> dict:
         # Resolve supplier entity via alias mapping (handles "Supplier C", "S001", etc.)
         _entity = resolve_supplier(query)
 
-        # Extract target percentage (last % in the query, e.g. "10%", "5.5%")
-        _pct_matches = re.findall(r'(\d+(?:\.\d+)?)\s*%', query)
+        # Extract target percentage — handles both symbol ("25%") and word ("25 percent")
+        # WHY also match "percent"?
+        #   Users say "worsens to 25 percent" or "rises to 35 percent" without the
+        #   % symbol. The previous regex only matched \d+\s*% and returned None for
+        #   word-form percentages, causing the simulation to silently default to a
+        #   50% improvement instead of the user's requested target.
+        _pct_matches = re.findall(r'(\d+(?:\.\d+)?)(?:\s*%|\s+percent\b)', query_lower_early)
         _target      = float(_pct_matches[-1]) if _pct_matches else None
 
         log.info(
@@ -1015,7 +1038,10 @@ def create_plan(query: str, role: str) -> dict:
                                 "average value per shipment"],
         "shipment_value":      ["total shipment value", "shipment value",
                                 "value of shipments", "carries the most",
+                                "carry the most",
                                 "most value", "highest value",
+                                "most shipment value", "highest shipment value",
+                                "most valuable shipments",
                                 "value by supplier", "shipment worth"],
         # ── Delay statistics ─────────────────────────────────────────────────
         "max_delay":           ["maximum delay", "max delay observed",
@@ -1037,7 +1063,13 @@ def create_plan(query: str, role: str) -> dict:
         # ── Existing metrics ─────────────────────────────────────────────────
         # "contributes" added so "which region contributes most to delays"
         # is detected as delay_rate + region → highest_delay_rate_region
-        "delay_rate":    ["delay rate", "delay percentage", "contributes"],
+        # "most delayed", "most delays", "highest delay", "worst delay" added so
+        # natural phrasings like "which region has the most delayed shipments",
+        # "highest delay region", "which product category causes the most delays",
+        # and "who has the worst delay rate" correctly detect delay_rate metric
+        # and route to the right per-dimension SQL template.
+        "delay_rate":    ["delay rate", "delay percentage", "contributes",
+                          "most delayed", "most delays", "highest delay", "worst delay"],
         "otd":           ["otd", "on-time delivery", "on time delivery",
                           "on-time rate", "on time rate"],
         "delayed_count": ["delayed shipments", "delayed count"],
@@ -1061,7 +1093,13 @@ def create_plan(query: str, role: str) -> dict:
     ]
     _DIMENSION_TRIGGERS: dict[str, list[str]] = {
         "supplier":         ["supplier", "vendor"] + _supplier_alias_triggers,
-        "region":           ["region"],
+        # WHY extend region triggers with cardinal directions and geography terms?
+        #   Users rarely say "which region has the highest delay rate" verbatim.
+        #   They say "which area", "which geography", or name a direction like
+        #   "south" or "north" directly. Adding these ensures the region SQL
+        #   template fires for natural phrasing, not just the word "region".
+        "region":           ["region", "geography", "area",
+                             "south", "north", "east", "west"],
         "product_category": ["product category", "category", "product"],
     }
 
@@ -1131,7 +1169,11 @@ def create_plan(query: str, role: str) -> dict:
     #   with a time scope. We extract the YYYY-MM string and pass it as a SQL
     #   parameter via step["params"] — no SQL generated at runtime.
 
-    _COUNT_TRIGGERS = ["how many", "total number of", "count of", "number of delayed"]
+    # "total fleet delayed" added so "total fleet delayed shipments" routes here
+    # instead of falling through to the LLM full-investigation path which
+    # returns the most-recent-month rate rather than the fleet count.
+    _COUNT_TRIGGERS = ["how many", "total number of", "count of", "number of delayed",
+                       "total fleet delayed"]
     is_count_query  = any(t in query_lower for t in _COUNT_TRIGGERS)
 
     # Does the count question specifically ask about DELAYED shipments?
@@ -1231,6 +1273,14 @@ def create_plan(query: str, role: str) -> dict:
             # ── NEW: SLA gap (join query) ─────────────────────────────────────
             ("sla_gap",        "supplier",     "highest"): "sla_gap_by_supplier",
             ("sla_gap",        "fleet",        "highest"): "sla_gap_by_supplier",
+            # ── FIX Q12: OTD per supplier ────────────────────────────────────
+            # If a specific entity is named ("Supplier C", "SUP003"), route to
+            # supplier_specific_otd (single-supplier OTD with ? param).
+            # If no entity, fall through to supplier_sla_performance (all suppliers).
+            # Detection happens below in _sm_db_task override — these entries
+            # serve as the fallback when no specific entity is detected.
+            ("otd",            "supplier",     "highest"): "supplier_sla_performance",
+            ("otd",            "supplier",     "lowest"):  "supplier_sla_performance",
         }
         # ── Comparison queries: route to supplier_delay_comparison ───────────
         # WHY check BEFORE _SIMPLE_METRIC_TASK_MAP?
@@ -1255,9 +1305,82 @@ def create_plan(query: str, role: str) -> dict:
         else:
             _sm_multi_row  = False
             _avoidable_sm  = detected_metric == "cost" and "avoidable" in query_lower
+
+            # FIX 7: Cost trend detection — "supply chain cost trend from 2022 to 2024"
+            # WHY before task map?  total_supply_chain_cost would be selected by
+            # ("cost","fleet","highest") and then _inject_time_filter would add
+            # WHERE year=2022 (first year found), returning only one year's data.
+            # Detecting "trend" here forces annual_supply_chain_cost_trend which
+            # uses BETWEEN ? AND ? params and returns all years in the range.
+            _COST_TREND_TRIGGERS_SM = [
+                "trend", "year over year", "2022 to 2024", "across years",
+                "from 2022 to",
+            ]
+            _is_cost_trend_sm = (
+                detected_metric == "cost"
+                and any(t in query_lower for t in _COST_TREND_TRIGGERS_SM)
+            )
+
+            # FIX 3: Specific region delay rate detection
+            # WHY before task map?  ("delay_rate","region","highest") maps to
+            # highest_delay_rate_region which returns ALL regions sorted by rate.
+            # When the user names a specific region ("North region delay rate?"),
+            # they want a single-row answer — not a ranked list. Detecting the
+            # named region here overrides to specific_region_delay_rate with params.
+            _REGION_NAMES_SM = {
+                "north": "North", "south": "South",
+                "east":  "East",  "west":  "West",
+            }
+            _REGION_SUPERLATIVES_SM = [
+                "which region", "highest", "worst", "most", "best", "lowest", "top",
+            ]
+            _detected_specific_region_sm = None
+            if detected_metric == "delay_rate" and detected_dimension == "region":
+                _has_region_superlative = any(
+                    kw in query_lower for kw in _REGION_SUPERLATIVES_SM
+                )
+                if not _has_region_superlative:
+                    for _rn, _rc in _REGION_NAMES_SM.items():
+                        if _rn in query_lower:
+                            _detected_specific_region_sm = _rc
+                            break
+
+            # FIX Q12: If metric=otd + dimension=supplier + specific entity named
+            # → use supplier_specific_otd (single supplier ? param query)
+            # rather than supplier_sla_performance (full fleet breakdown).
+            _is_specific_supplier_otd_sm = (
+                detected_metric == "otd"
+                and detected_dimension == "supplier"
+                and detected_entity is not None
+            )
+
+            # FIX Q19 (Stage 4f): Cumulative AI savings detection.
+            # WHY also check here (not just Stage 5a)?
+            #   "ai savings" is in _METRIC_TRIGGERS["ai_investment"], so
+            #   "how much has AI saved us?" triggers Stage 4f before Stage 5a.
+            #   Without this check, it falls through to ai_investment_by_year.
+            _AI_SAVINGS_TERMS_SM = [
+                "cumulative ai savings", "total ai savings", "ai savings",
+                "savings from ai", "how much has ai saved", "ai saved",
+            ]
+            _AI_SAVINGS_EXCLUSIONS_SM = ["investment", "spend", "cost", "roi"]
+            _is_cumulative_ai_savings_sm = (
+                detected_metric == "ai_investment"
+                and any(t in query_lower for t in _AI_SAVINGS_TERMS_SM)
+                and not any(ex in query_lower for ex in _AI_SAVINGS_EXCLUSIONS_SM)
+            )
+
             _sm_db_task    = (
-                "total_avoidable_cost"
+                "cumulative_ai_savings"
+                if _is_cumulative_ai_savings_sm
+                else "total_avoidable_cost"
                 if _avoidable_sm
+                else "annual_supply_chain_cost_trend"
+                if _is_cost_trend_sm
+                else "specific_region_delay_rate"
+                if _detected_specific_region_sm
+                else "supplier_specific_otd"
+                if _is_specific_supplier_otd_sm
                 else _SIMPLE_METRIC_TASK_MAP.get(
                     (detected_metric, detected_dimension, detected_polarity)
                 )
@@ -1277,19 +1400,56 @@ def create_plan(query: str, role: str) -> dict:
                 "financial_impact"
                 if detected_metric in ("cost", "roi", "expedited_cost",
                                        "ai_investment")
+                or _sm_db_task == "cumulative_ai_savings"
                 else "suppliers_master"
-                if detected_metric in ("sla_gap",)
+                if detected_metric in ("sla_gap", "otd")
+                or _sm_db_task == "supplier_specific_otd"
                 else "shipments"
             )
             _sm_steps: list[dict] = []
             if not (_sm_allowed and _sm_db_table not in _sm_allowed):
-                _sm_steps.append({
+                _sm_step_dict: dict = {
                     "step_number":             1,
                     "agent":                   "DB Agent",
                     "task":                    _sm_db_task,
                     "table":                   _sm_db_table,
                     "requires_human_approval": False,
-                })
+                }
+                # FIX 3: Specific region — pass region name as SQL param
+                if _sm_db_task == "specific_region_delay_rate" \
+                        and _detected_specific_region_sm:
+                    _sm_step_dict["params"] = (_detected_specific_region_sm,)
+                    log.info(
+                        f"create_plan | SPECIFIC REGION | "
+                        f"region='{_detected_specific_region_sm}' "
+                        f"→ specific_region_delay_rate"
+                    )
+                # FIX Q19: Cumulative AI savings — no params (SUM all years)
+                if _sm_db_task == "cumulative_ai_savings":
+                    log.info(
+                        "create_plan | CUMULATIVE AI SAVINGS (Stage 4f) "
+                        "→ cumulative_ai_savings"
+                    )
+                # FIX Q12: Supplier-specific OTD — pass supplier_id as SQL param
+                if _sm_db_task == "supplier_specific_otd" and detected_entity:
+                    _sm_step_dict["params"] = (detected_entity,)
+                    log.info(
+                        f"create_plan | SUPPLIER SPECIFIC OTD | "
+                        f"entity='{detected_entity}' → supplier_specific_otd"
+                    )
+                # FIX 7: Cost trend — pass year range as SQL BETWEEN params
+                if _sm_db_task == "annual_supply_chain_cost_trend":
+                    _yr_all_sm = [int(y) for y in re.findall(r'\b(202[0-9])\b', query)]
+                    _sm_step_dict["params"] = (
+                        _yr_all_sm[0] if _yr_all_sm else 2022,
+                        _yr_all_sm[-1] if len(_yr_all_sm) >= 2 else 2024,
+                    )
+                    log.info(
+                        f"create_plan | COST TREND | "
+                        f"years={_sm_step_dict['params']} "
+                        f"→ annual_supply_chain_cost_trend"
+                    )
+                _sm_steps.append(_sm_step_dict)
             _sm_steps.append({
                 "step_number":             len(_sm_steps) + 1,
                 "agent":                   "Executive Agent",
@@ -1352,12 +1512,240 @@ def create_plan(query: str, role: str) -> dict:
     # total_sla_breaches SQL template (not total_shipments). We check for SLA
     # breach terms BEFORE the generic count-query fork so it gets its own 1-step
     # plan instead of being swallowed by the SIMPLE_COUNT path.
+
+    # ── FIX 8: AI investment for a specific year ─────────────────────────────
+    # WHY here (Stage 5a) and not Stage 4f?
+    #   "Can you show AI investment for 2024?" has no METRIC_QUERY_KEYWORDS hit
+    #   ("can you show" / "ai investment" are not in the list), so
+    #   is_simple_metric_query() returns False — Stage 4f is skipped.
+    #   Detecting here ensures any query with "ai investment" + explicit year
+    #   routes directly to ai_investment_year (year-specific template) rather
+    #   than firing the full DELAY_ANALYSIS plan which returns no relevant data.
+    _AI_INVEST_TERMS_5A = [
+        "ai investment", "investment in ai", "ai spend",
+        "invested in ai", "show ai investment",
+    ]
+    _is_ai_invest_year_q = (
+        any(t in query_lower for t in _AI_INVEST_TERMS_5A)
+        and time_filter["year"] is not None
+    )
+
+    # ── FIX Q19: Cumulative AI savings ────────────────────────────────────────
+    # WHY separate from _is_ai_invest_year_q?
+    #   "How much has AI saved us?" is NOT about investment spend — it's about
+    #   the realised savings column (ai_savings_usd). The two concepts are
+    #   semantically distinct; merging them would return spend instead of savings.
+    # WHY exclude "investment", "spend", "cost", "roi"?
+    #   Prevent "What is the ROI of our AI investment?" from matching this path.
+    _AI_SAVINGS_TERMS_5A = [
+        "cumulative ai savings", "total ai savings", "ai savings",
+        "savings from ai", "how much has ai saved", "ai saved",
+    ]
+    _AI_SAVINGS_EXCLUSIONS_5A = ["investment", "spend", "cost", "roi"]
+    _is_cumulative_ai_savings_q = (
+        any(t in query_lower for t in _AI_SAVINGS_TERMS_5A)
+        and not any(ex in query_lower for ex in _AI_SAVINGS_EXCLUSIONS_5A)
+    )
+
+    # ── FIX 6: "Show me shipments delayed in [Month Year]" ───────────────────
+    # WHY a separate check?
+    #   "Show me shipments delayed in December 2024" is NOT a count query
+    #   ("show me" is absent from _COUNT_TRIGGERS) so it falls through to the
+    #   full DELAY_ANALYSIS plan → ROI agent fires → "expedite" appears in
+    #   recommendation field → approval gate fires incorrectly.
+    #   Detecting the "show + delayed + month" pattern here forces a minimal
+    #   2-step plan using delayed_count_by_month, which is the correct answer.
+    _SHOW_DELAYED_TERMS_5A = ["show me", "list", "show all", "show shipments"]
+    _is_show_delayed_q = (
+        has_time_period
+        and period_param
+        and is_delayed_count
+        and not is_count_query        # handled below already
+        and any(t in query_lower for t in _SHOW_DELAYED_TERMS_5A)
+        and not any(
+            kw in query_lower
+            for kw in ["terminate", "switch", "cancel", "expedite", "change supplier"]
+        )
+    )
+
+    # ── FIX 2: Which supplier has the most SLA breaches? ─────────────────────
+    # WHY separate from _is_sla_breach_query (fleet total)?
+    #   "Which supplier has the most SLA breaches?" needs PER-SUPPLIER breach
+    #   counts (supplier_sla_breach_ranking). The existing _is_sla_breach_query
+    #   path routes to total_sla_breaches which returns only the fleet-wide total
+    #   (14) — the supplier breakdown is lost. Detecting "supplier" + "most/which"
+    #   + sla-breach terms BEFORE _is_sla_breach_query captures this case first.
+    _SUPPLIER_SLA_BREACH_TERMS_5A = [
+        "most sla breaches", "most breaches", "sla breach", "sla breaches",
+    ]
+    _SUPPLIER_SLA_QUALIFIER_5A = ["which", "most", "highest", "who"]
+    _is_supplier_sla_breach_q = (
+        "supplier" in query_lower
+        and any(t in query_lower for t in _SUPPLIER_SLA_BREACH_TERMS_5A)
+        and any(kw in query_lower for kw in _SUPPLIER_SLA_QUALIFIER_5A)
+    )
+
+    # ── FIX 4: Supplier-specific shipment count ───────────────────────────────
+    # WHY here and not inside the existing count-query branch?
+    #   "How many shipments does SUP002 handle?" is a count query AND has a
+    #   detected_entity. The existing count branch routes to total_shipments
+    #   (fleet-wide) because it has no supplier-specific logic. Detecting
+    #   supplier + count before the generic branch ensures we use
+    #   supplier_shipment_count with params=(supplier_id,) instead.
+    _is_supplier_count_q = (
+        is_count_query
+        and detected_entity is not None
+    )
+
+    # ── FIX: In-transit shipment count ───────────────────────────────────────
+    # WHY a separate check?
+    #   "How many shipments are in transit?" is a count query but NOT a delayed
+    #   count (is_delayed_count = False). The existing count path falls through
+    #   to "total shipments fleet-wide" which omits any "transit" mention.
+    #   Detecting "in transit" here routes directly to in_transit_shipments.
+    _is_in_transit_q = (
+        is_count_query
+        and ("in transit" in query_lower or "in_transit" in query_lower)
+    )
+
+    # ── SLA BREACH EARLY-EXIT (fleet total) ──────────────────────────────────
     _SLA_BREACH_TERMS = [
         "sla breach", "sla breaches", "breach count", "total breaches",
         "total sla", "how many sla", "number of sla",
     ]
-    _is_sla_breach_query = any(t in query_lower for t in _SLA_BREACH_TERMS)
-    if _is_sla_breach_query:
+    # Exclude from fleet-total path if supplier SLA breach path already claimed it
+    _is_sla_breach_query = (
+        any(t in query_lower for t in _SLA_BREACH_TERMS)
+        and not _is_supplier_sla_breach_q
+    )
+
+    if _is_cumulative_ai_savings_q:
+        steps = [
+            {
+                "step_number":             1,
+                "agent":                   "DB Agent",
+                "task":                    "cumulative_ai_savings",
+                "table":                   "financial_impact",
+                "requires_human_approval": False,
+            },
+            {
+                "step_number":             2,
+                "agent":                   "Executive Agent",
+                "task":                    "State the cumulative AI savings in one sentence",
+                "table":                   None,
+                "requires_human_approval": False,
+            },
+        ]
+        metric_definition = "SIMPLE_COUNT"
+        log.info("create_plan | CUMULATIVE AI SAVINGS — cumulative_ai_savings")
+    elif _is_ai_invest_year_q:
+        steps = [
+            {
+                "step_number":             1,
+                "agent":                   "DB Agent",
+                "task":                    "ai_investment_year",
+                "table":                   "financial_impact",
+                "requires_human_approval": False,
+                "params":                  (time_filter["year"],),
+            },
+            {
+                "step_number":             2,
+                "agent":                   "Executive Agent",
+                "task":                    "State the AI investment for the requested year in one sentence",
+                "table":                   None,
+                "requires_human_approval": False,
+            },
+        ]
+        metric_definition = "SIMPLE_COUNT"
+        log.info(
+            f"create_plan | AI INVEST YEAR QUERY — ai_investment_year "
+            f"(year={time_filter['year']})"
+        )
+    elif _is_show_delayed_q:
+        steps = [
+            {
+                "step_number":             1,
+                "agent":                   "DB Agent",
+                "task":                    "delayed count by month",
+                "table":                   "shipments",
+                "requires_human_approval": False,
+                "params":                  (period_param,),
+            },
+            {
+                "step_number":             2,
+                "agent":                   "Executive Agent",
+                "task":                    "State the delayed shipment count for the requested month",
+                "table":                   None,
+                "requires_human_approval": False,
+            },
+        ]
+        metric_definition = "SIMPLE_COUNT"
+        log.info(
+            f"create_plan | SHOW DELAYED MONTH — delayed_count_by_month "
+            f"(period={period_param})"
+        )
+    elif _is_supplier_sla_breach_q:
+        steps = [
+            {
+                "step_number":             1,
+                "agent":                   "DB Agent",
+                "task":                    "supplier_sla_breach_ranking",
+                "table":                   "shipments",
+                "requires_human_approval": False,
+            },
+            {
+                "step_number":             2,
+                "agent":                   "Executive Agent",
+                "task":                    "State which supplier has the most SLA breaches in one sentence",
+                "table":                   None,
+                "requires_human_approval": False,
+            },
+        ]
+        metric_definition = "SIMPLE_COUNT"
+        log.info("create_plan | SUPPLIER SLA BREACH QUERY — supplier_sla_breach_ranking")
+    elif _is_supplier_count_q:
+        steps = [
+            {
+                "step_number":             1,
+                "agent":                   "DB Agent",
+                "task":                    "supplier_shipment_count",
+                "table":                   "shipments",
+                "requires_human_approval": False,
+                "params":                  (detected_entity,),
+            },
+            {
+                "step_number":             2,
+                "agent":                   "Executive Agent",
+                "task":                    "State the shipment count for this supplier in one sentence",
+                "table":                   None,
+                "requires_human_approval": False,
+            },
+        ]
+        metric_definition = "SIMPLE_COUNT"
+        log.info(
+            f"create_plan | SUPPLIER SHIPMENT COUNT — supplier_shipment_count "
+            f"(entity={detected_entity})"
+        )
+    elif _is_in_transit_q:
+        steps = [
+            {
+                "step_number":             1,
+                "agent":                   "DB Agent",
+                "task":                    "in_transit_shipments",
+                "table":                   "shipments",
+                "requires_human_approval": False,
+            },
+            {
+                "step_number":             2,
+                "agent":                   "Executive Agent",
+                "task":                    "State the number of in-transit shipments in one sentence",
+                "table":                   None,
+                "requires_human_approval": False,
+            },
+        ]
+        metric_definition = "SIMPLE_COUNT"
+        log.info("create_plan | IN-TRANSIT COUNT — in_transit_shipments")
+    elif _is_sla_breach_query:
         steps = [
             {
                 "step_number":             1,

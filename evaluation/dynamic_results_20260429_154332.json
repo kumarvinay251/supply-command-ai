@@ -1,0 +1,380 @@
+{
+  "run_at": "2026-04-29T15:43:32.749044",
+  "total": 20,
+  "passed": 20,
+  "failed": 0,
+  "pass_pct": 100,
+  "avg_ms": 450,
+  "p99_ms": 5644,
+  "failure_categories": {},
+  "results": [
+    {
+      "id": "D01",
+      "query": "What is the average delay in days for delayed shipments?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "avg_delay_days",
+      "answer": "Average delay for delayed shipments: 6.0 days (max 12 days, across 15 delayed shipments).",
+      "confidence": 0.9,
+      "elapsed_ms": 11,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D02",
+      "query": "How many SLA breaches do we have?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "total_sla_breaches",
+      "answer": "Total SLA breaches: 14 (above threshold of 10).",
+      "confidence": 0.95,
+      "elapsed_ms": 4,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D03",
+      "query": "What is the maximum delay observed?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "max_delay_days",
+      "answer": "Maximum observed delay is 12 days (across 15 delayed shipments).",
+      "confidence": 0.9,
+      "elapsed_ms": 3,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D04",
+      "query": "What category has the highest delay rate?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "highest_delay_rate_product_category",
+      "answer": "Highest delay rate by product category: PPE at 21.1% (4 delayed of 19 total shipments). All categories: PPE 21.1%, Diagnostic Equipment 17.9%, Surgical Instruments 13.6%, Consumables 10.5%, Implants 8.3%.",
+      "confidence": 0.85,
+      "elapsed_ms": 3,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D05",
+      "query": "What is the total shipment value?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "total_shipment_value",
+      "answer": "Total shipment value across 100 shipments: \\$51.06M.",
+      "confidence": 0.9,
+      "elapsed_ms": 2,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D06",
+      "query": "What is the AI return on investment for 2024?",
+      "role": "CFO",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "roi_progression",
+      "answer": "Latest ROI: 340% as of Dec-2024. Cumulative AI savings: \\$401,000.",
+      "confidence": 0.85,
+      "elapsed_ms": 2,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D07",
+      "query": "How much did we spend on expedited shipping?",
+      "role": "CFO",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "total_expedited_cost",
+      "answer": "Total expedited shipping cost is \\$379,997.",
+      "confidence": 0.9,
+      "elapsed_ms": 4,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D08",
+      "query": "How many shipments are in transit?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "in_transit_shipments",
+      "answer": "4 shipments are currently in transit.",
+      "confidence": 0.9,
+      "elapsed_ms": 2,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D09",
+      "query": "Which supplier has the most SLA breaches?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent",
+        "rag_agent",
+        "roi_agent"
+      ],
+      "template_used": "supplier_sla_breach_ranking",
+      "answer": "SUP001 and SUP003 are tied with 6 SLA breaches each.",
+      "confidence": 0.9,
+      "elapsed_ms": 2357,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D10",
+      "query": "What is the delay rate for the North region?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "specific_region_delay_rate",
+      "answer": "North region delay rate: 11.1% (3 delayed of 27 shipments).",
+      "confidence": 0.9,
+      "elapsed_ms": 7,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D11",
+      "query": "What if Supplier A delay rate drops to 15%?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "WHATIF_QUERY",
+      "agents_used": [
+        "ROI Agent (simulation)"
+      ],
+      "template_used": "",
+      "answer": "\ud83d\udcca **What-If Simulation \u2014 SupplierA (SUP001)**\n\n**Current State**\n\u2022 Delay rate: 19.44%\n\u2022 Delayed shipments: 7 of 36\n\u2022 Expedited cost (actual): \\$177,332\n\n**Simulated State (target: 15.00%)**\n\u2022 Delayed shipments: 5 (\u22122 shipments)\n\u2022 Estimated cost saving: \\$40,502\n\u2022 Annual projection: \\$121,505\n\nImprovement: 23% reduction in delay rate\n**Annual Spend at Risk:** \\$5,125,000\n\n_Confidence: High \u00b7 Source: What-If Simulation \u00b7 DB-grounded_",
+      "confidence": 0.85,
+      "elapsed_ms": 1,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D12",
+      "query": "What is the cumulative AI savings?",
+      "role": "CFO",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "cumulative_ai_savings",
+      "answer": "Cumulative AI savings: \\$401,000.",
+      "confidence": 0.9,
+      "elapsed_ms": 3,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D13",
+      "query": "Should we expedite all SUP001 shipments?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "DECISION_QUERY",
+      "agents_used": [
+        "db_agent",
+        "rag_agent",
+        "roi_agent"
+      ],
+      "template_used": "Get current state data for the area in question",
+      "answer": "\u26a0\ufe0f This decision requires human approval before any action is taken.\n\n**Query:** Should we expedite all SUP001 shipments?\n\n**Reason:** High-risk action 'expedite' found in recommendation. Irreversible actions require human sign-off.\n**Impact:** Action: 'expedite' | Shipments affected: 33\n\nPlease review with your manager and use the Approve, Reject, or Escalate buttons below before any supply chain action is taken.",
+      "confidence": 0.7538,
+      "elapsed_ms": 637,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D14",
+      "query": "What is the delay rate for PPE category?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "highest_delay_rate_product_category",
+      "answer": "Highest delay rate by product category: PPE at 21.1% (4 delayed of 19 total shipments). All categories: PPE 21.1%, Diagnostic Equipment 17.9%, Surgical Instruments 13.6%, Consumables 10.5%, Implants 8.3%.",
+      "confidence": 0.85,
+      "elapsed_ms": 3,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D15",
+      "query": "How many shipments does SUP002 handle?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent",
+        "rag_agent",
+        "roi_agent"
+      ],
+      "template_used": "supplier_shipment_count",
+      "answer": "SUP002 handles 34 shipments.",
+      "confidence": 0.9,
+      "elapsed_ms": 295,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D16",
+      "query": "What is the on-time delivery rate for Supplier C?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "supplier_specific_otd",
+      "answer": "SUP003 on-time delivery rate: 80.0% (24 of 30 shipments on time).",
+      "confidence": 0.9,
+      "elapsed_ms": 7,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D17",
+      "query": "Show me shipments delayed in December 2024",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "delayed count by month",
+      "answer": "In December 2024: 1 delayed shipment(s) out of 4 total (25.0% delay rate).",
+      "confidence": 0.9,
+      "elapsed_ms": 6,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D18",
+      "query": "What is the supply chain cost trend from 2022 to 2024?",
+      "role": "CFO",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "annual_supply_chain_cost_trend",
+      "answer": "Supply chain cost trend \u2014 2022: \\$5,763,000; 2023: \\$5,839,000; 2024: \\$5,841,000.",
+      "confidence": 0.9,
+      "elapsed_ms": 4,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D19",
+      "query": "Can you show AI investment for 2024?",
+      "role": "CFO",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent"
+      ],
+      "template_used": "ai_investment_year",
+      "answer": "AI investment for 2024: \\$94,000.",
+      "confidence": 0.9,
+      "elapsed_ms": 6,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    },
+    {
+      "id": "D20",
+      "query": "Which supplier should we prioritize for performance review?",
+      "role": "Operations Manager",
+      "passed": true,
+      "query_type": "METRIC_QUERY",
+      "agents_used": [
+        "db_agent",
+        "roi_agent",
+        "rag_agent"
+      ],
+      "template_used": "Get supplier on-time rate vs SLA target from suppliers_master",
+      "answer": "The supplier that should be prioritized for performance review is SUP001, which has the worst on-time delivery (OTD) performance at 72.2%, significantly below the target of 92.0%. This results in a gap of 19.8%, indicating a critical need for intervention.\nSources: shipments / suppliers_master / financial_impact (SQLite)  \nConfidence: 60%",
+      "confidence": 0.7528,
+      "elapsed_ms": 5644,
+      "missing": [],
+      "found_bad": [],
+      "failure_cat": "",
+      "demo_blocker": false
+    }
+  ]
+}

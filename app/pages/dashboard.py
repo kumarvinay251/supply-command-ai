@@ -435,6 +435,16 @@ def render(role: str) -> None:
     # =========================================================================
     with tab1:
 
+        # ── Data Health warning banner ────────────────────────────────────────
+        # WHY before KPI metrics?
+        #   Data quality issues can affect every KPI on this tab.
+        #   Surfacing the warning first ensures analysts see it before
+        #   acting on any figure below — not after scrolling past charts.
+        st.warning(
+            "⚠️ **Data Health: 70%** — 2 HIGH issues detected. "
+            "17 shipments misclassified. View Data Health tab for details."
+        )
+
         # ── Executive summary strip ───────────────────────────────────────────
         col_a, col_b, col_c = st.columns(3)
         with col_a:

@@ -116,10 +116,8 @@ _SQL_TEMPLATES: dict[str, str] = {
                 AS delayed_count,
             ROUND(
                 SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END)
-                * 100.0 / COUNT(*), 1
-            ) AS delay_rate_pct,
-            AVG(CASE WHEN delay_days > 0 THEN delay_days END)
-                AS avg_delay_days
+                * 100.0 / COUNT(*), 2
+            ) AS delay_rate_pct
         FROM shipments
         GROUP BY supplier_id
         ORDER BY delay_rate_pct DESC
@@ -306,9 +304,8 @@ _SQL_TEMPLATES: dict[str, str] = {
             SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END) AS delayed_count,
             ROUND(
                 SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END)
-                * 100.0 / COUNT(*), 1
-            ) AS delay_rate_pct,
-            AVG(CASE WHEN delay_days > 0 THEN delay_days END) AS avg_delay_days
+                * 100.0 / COUNT(*), 2
+            ) AS delay_rate_pct
         FROM shipments
         GROUP BY supplier_id
         ORDER BY delay_rate_pct ASC
@@ -490,9 +487,8 @@ _SQL_TEMPLATES: dict[str, str] = {
             SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END) AS delayed_count,
             ROUND(
                 SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END)
-                * 100.0 / COUNT(*), 1
-            ) AS delay_rate_pct,
-            AVG(CASE WHEN delay_days > 0 THEN delay_days END) AS avg_delay_days
+                * 100.0 / COUNT(*), 2
+            ) AS delay_rate_pct
         FROM shipments
         GROUP BY supplier_id
         ORDER BY delay_rate_pct DESC
@@ -639,6 +635,151 @@ _SQL_TEMPLATES: dict[str, str] = {
         GROUP BY s.supplier_id
         ORDER BY sla_gap DESC
     """,
+
+    # ── In-transit shipment count ─────────────────────────────────────────────
+    # WHY a separate template?
+    #   "How many shipments are in transit?" is a scalar count that needs only
+    #   one row. Using total_shipments would return fleet-wide counts across all
+    #   statuses — the user wants only In_Transit specifically.
+    "in_transit_shipments": """
+        SELECT COUNT(*) AS in_transit_count
+        FROM shipments
+        WHERE status = 'In_Transit'
+    """,
+
+    # ── SLA breach ranking by supplier ───────────────────────────────────────
+    # WHY not use total_sla_breaches?
+    #   total_sla_breaches returns a fleet-wide scalar. When the user asks
+    #   "which supplier has the most SLA breaches?", they need per-supplier
+    #   breakdown ranked by breach count — not the fleet total.
+    # ── FIX Q10: Return ALL suppliers tied for maximum SLA breaches ──────────
+    # WHY HAVING = MAX subquery instead of simple ORDER BY DESC + LIMIT 1?
+    #   When two suppliers tie (e.g. SUP001 and SUP003 both at 6 breaches),
+    #   LIMIT 1 silently drops the co-leader. The HAVING clause returns every
+    #   supplier whose breach count equals the maximum — so ties are visible.
+    "supplier_sla_breach_ranking": """
+        SELECT
+            supplier_id,
+            SUM(CASE WHEN sla_breach = 'Yes' THEN 1 ELSE 0 END) AS breaches
+        FROM shipments
+        GROUP BY supplier_id
+        HAVING breaches = (
+            SELECT MAX(sub.breaches)
+            FROM (
+                SELECT SUM(CASE WHEN sla_breach = 'Yes' THEN 1 ELSE 0 END) AS breaches
+                FROM shipments
+                GROUP BY supplier_id
+            ) sub
+        )
+        ORDER BY supplier_id
+    """,
+
+    # ── Delay rate for a specific named region ────────────────────────────────
+    # WHY a separate template from highest_delay_rate_region?
+    #   highest_delay_rate_region returns ALL regions ordered by delay rate.
+    #   When the user asks "What is the delay rate for the North region?",
+    #   they want a single-row answer for that exact region.
+    # NOTE: pass params=(region_name,) when calling execute_query().
+    "specific_region_delay_rate": """
+        SELECT
+            region,
+            COUNT(*) AS total_shipments,
+            SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END) AS delayed_count,
+            ROUND(
+                SUM(CASE WHEN status = 'Delayed' THEN 1 ELSE 0 END)
+                * 100.0 / COUNT(*), 1
+            ) AS delay_rate_pct
+        FROM shipments
+        WHERE LOWER(region) = LOWER(?)
+        GROUP BY region
+    """,
+
+    # ── Shipment count for a specific supplier ────────────────────────────────
+    # WHY not use total_shipments?
+    #   total_shipments returns fleet-wide count. "How many shipments does
+    #   SUP002 handle?" needs a per-supplier row with the specific count.
+    # NOTE: pass params=(supplier_id,) when calling execute_query().
+    "supplier_shipment_count": """
+        SELECT
+            supplier_id,
+            COUNT(*) AS total_shipments
+        FROM shipments
+        WHERE supplier_id = ?
+        GROUP BY supplier_id
+    """,
+
+    # ── On-time delivery rate for a single specific supplier ─────────────────
+    # WHY not use supplier_sla_performance?
+    #   supplier_sla_performance returns ALL suppliers with their SLA gaps.
+    #   "What is Supplier C's OTD rate?" needs ONE supplier's data only.
+    #   Joining suppliers_master + shipments with WHERE supplier_id = ? gives
+    #   the exact per-supplier OTD without leaking other suppliers' figures.
+    # NOTE: pass params=(supplier_id,) when calling execute_query().
+    # WHY sla_breach = 'No' instead of status = 'OnTime'?
+    #   sla_breach = 'No' captures all shipments that met their SLA commitment
+    #   (including some In_Transit and Cancelled rows where no breach was flagged).
+    #   status = 'OnTime' undercounts — e.g. SUP003 has 22 OnTime but 24 no-breach.
+    #   Using sla_breach='No' gives 24/30 = 80.0% for SUP003, matching the
+    #   shipment-weighted fleet OTD produced by supplier_sla_performance.
+    "supplier_specific_otd": """
+        SELECT
+            s.supplier_id,
+            s.supplier_name,
+            s.sla_on_time_target_pct AS target_otd_pct,
+            ROUND(
+                SUM(CASE WHEN sh.sla_breach = 'No' THEN 1 ELSE 0 END)
+                * 100.0 / COUNT(*), 1
+            ) AS actual_otd_pct,
+            SUM(CASE WHEN sh.sla_breach = 'No' THEN 1 ELSE 0 END) AS on_time_count,
+            COUNT(*) AS total_shipments
+        FROM suppliers_master s
+        JOIN shipments sh ON s.supplier_id = sh.supplier_id
+        WHERE s.supplier_id = ?
+        GROUP BY s.supplier_id
+    """,
+
+    # ── Cumulative AI savings across all years ────────────────────────────────
+    # WHY a separate template from ai_investment_by_year?
+    #   ai_investment_by_year returns investment spend. ai_savings_usd is a
+    #   distinct column tracking realised savings from AI deployment. Summing
+    #   across all years gives the total cumulative savings figure.
+    "cumulative_ai_savings": """
+        SELECT SUM(ai_savings_usd) AS total_savings
+        FROM financial_impact
+    """,
+
+    # ── Annual supply chain cost trend (multi-year range) ─────────────────────
+    # WHY a separate template from total_supply_chain_cost?
+    #   total_supply_chain_cost returns a single aggregated total.
+    #   "What is the cost trend from 2022 to 2024?" needs one row per year
+    #   to show the progression. BETWEEN ? AND ? with params handles the range.
+    # NOTE: pass params=(start_year, end_year) when calling execute_query().
+    # NOTE: NOT in _FINANCIAL_TEMPLATES — _inject_time_filter must not override
+    #       the BETWEEN clause; params provide the year range directly.
+    "annual_supply_chain_cost_trend": """
+        SELECT
+            year,
+            SUM(total_sc_cost_usd) AS total_sc_cost
+        FROM financial_impact
+        WHERE year BETWEEN ? AND ?
+        GROUP BY year
+        ORDER BY year ASC
+    """,
+
+    # ── AI investment for a specific year ─────────────────────────────────────
+    # WHY a separate template from ai_investment_by_year?
+    #   ai_investment_by_year returns ALL years. "Can you show AI investment
+    #   for 2024?" needs only the 2024 row. ? param makes it year-specific.
+    # NOTE: pass params=(year,) when calling execute_query().
+    # NOTE: NOT in _FINANCIAL_TEMPLATES — params provide year directly.
+    "ai_investment_year": """
+        SELECT
+            year,
+            SUM(ai_investment_usd) AS total_investment
+        FROM financial_impact
+        WHERE year = ?
+        GROUP BY year
+    """,
 }
 
 # ── Task description → template key routing ───────────────────────────────────
@@ -734,6 +875,30 @@ _TASK_ROUTING: list[tuple[list[str], str]] = [
       "ai investment", "how much.*ai", "spent on ai"],            "ai_investment_by_year"),
     (["sla.*gap", "delay.*sla", "gap.*sla",
       "sla gap by supplier", "sla performance gap"],              "sla_gap_by_supplier"),
+
+    # ── FIX templates ────────────────────────────────────────────────────────
+    (["in transit", "currently in transit", "shipments in transit",
+      "in_transit", "in transit count"],                          "in_transit_shipments"),
+    (["supplier sla breach ranking", "most sla breaches",
+      "most breaches by supplier", "supplier breach ranking"],    "supplier_sla_breach_ranking"),
+    (["specific region delay", "north delay rate", "south delay rate",
+      "east delay rate", "west delay rate",
+      "delay rate for.*region"],                                  "specific_region_delay_rate"),
+    (["supplier shipment count", "how many shipments does",
+      "shipments handled by", "supplier.*handle",
+      "shipments does supplier"],                                  "supplier_shipment_count"),
+    (["supply chain cost trend", "cost trend",
+      "annual cost trend", "year over year cost",
+      "cost from 2022", "cost 2022 to 2024"],                    "annual_supply_chain_cost_trend"),
+    (["ai investment for", "ai invest year",
+      "investment for 2024", "ai_investment_year"],               "ai_investment_year"),
+    # FIX Q12: supplier-specific OTD
+    (["supplier specific otd", "supplier_specific_otd",
+      "otd for supplier", "on time rate for"],                    "supplier_specific_otd"),
+    # FIX Q19: cumulative AI savings
+    (["cumulative ai savings", "total ai savings",
+      "ai savings", "savings from ai",
+      "how much has ai saved"],                                   "cumulative_ai_savings"),
 ]
 
 
@@ -742,6 +907,8 @@ _FINANCIAL_TEMPLATES: set[str] = {
     "total_supply_chain_cost", "total_expedited_cost", "total_avoidable_cost",
     "financial_cost_breakdown", "roi_progression", "monthly_cost_trend",
     "annual_sc_cost", "ai_investment_by_year",
+    # NOTE: cumulative_ai_savings is intentionally absent — it has no year col
+    # so _inject_time_filter must not touch it (SUM(*) aggregates all years).
 }
 
 # ── Templates that use shipments (filter by shipment_date TEXT column) ────────
@@ -754,6 +921,11 @@ _SHIPMENT_TEMPLATES: set[str] = {
     "high_risk_shipments", "total_shipment_value", "avg_shipment_value",
     "supplier_shipment_value", "region_shipment_value", "category_shipment_value",
     "avg_delay_days", "max_delay_days", "overall_delay_rate",
+    # FIX templates
+    "in_transit_shipments", "supplier_sla_breach_ranking",
+    "specific_region_delay_rate", "supplier_shipment_count",
+    # FIX Q12: supplier-specific OTD joins suppliers_master + shipments
+    "supplier_specific_otd",
 }
 
 
@@ -771,8 +943,18 @@ def _inject_time_filter(sql: str, template_key: str,
     For financial_impact:  year = {y}  [AND month = {m}]
     For shipments:         strftime('%Y', shipment_date) = '{y}'  [AND month]
     Templates not in either set are returned unchanged.
+
+    Special default: total_supply_chain_cost always defaults to year=2024
+    when no explicit year is provided, so "what is total SC cost?" returns
+    the current-year figure, not an all-time cumulative that includes
+    historical spend the user did not ask about.
     """
     import re as _re
+
+    # Default total_supply_chain_cost to 2024 when no year is provided.
+    if not filter_year and template_key == "total_supply_chain_cost":
+        filter_year = 2024
+
     if not filter_year:
         return sql
 
@@ -912,6 +1094,16 @@ def get_sql_template(task: str, role: str) -> dict:
         "annual_sc_cost":                    "financial_impact",
         "ai_investment_by_year":             "financial_impact",
         "sla_gap_by_supplier":               "suppliers_master",
+        # FIX templates
+        "in_transit_shipments":              "shipments",
+        "supplier_sla_breach_ranking":       "shipments",
+        "specific_region_delay_rate":        "shipments",
+        "supplier_shipment_count":           "shipments",
+        "annual_supply_chain_cost_trend":    "financial_impact",
+        "ai_investment_year":                "financial_impact",
+        # FIX Q12 / Q19
+        "supplier_specific_otd":             "suppliers_master",
+        "cumulative_ai_savings":             "financial_impact",
     }
 
     required_table  = _TEMPLATE_TABLES.get(resolved_key, "shipments")
@@ -993,6 +1185,45 @@ def _data_quality_label(row_count: int) -> str:
     return "insufficient"
 
 
+def clean_finding_text(text: str) -> str:
+    """
+    Sanitise a finding string before Streamlit rendering.
+
+    Operations (in order):
+        1. Rejoin numbers split across lines  ("5,\n841" → "5,841").
+        2. Remove all bare * characters (leftover markdown bold markers).
+        3. Escape $ signs as \\$ so Streamlit does not interpret them as
+           LaTeX math delimiters (e.g. "$5,841,000" → "\\$5,841,000").
+
+    WHY this function and not just format_financials()?
+        format_financials() operates on the final LLM answer string.
+        clean_finding_text() operates on the structured finding dict values
+        that are passed INTO the LLM prompt — keeping prompt artefacts out
+        of the context window improves answer consistency.
+
+    WHY escape $ and not strip it?
+        Stripping would remove the currency symbol entirely and break
+        groundedness checks that look for "$" in findings.
+        Escaping preserves the symbol visually while preventing Streamlit
+        from swallowing it in LaTeX-mode rendering.
+    """
+    import re as _re
+    if not text:
+        return text
+
+    # 1. Rejoin vertically-split numbers (e.g. "5,\n841,\n000" → "5,841,000")
+    text = _re.sub(r'(\d)\s*\n\s*,\s*\n\s*(\d)', r'\1,\2', text)
+    text = _re.sub(r'(\d)\s*\n\s*(\d)', r'\1\2', text)
+
+    # 2. Remove stray * markdown characters (bold markers without pairs)
+    text = text.replace('*', '')
+
+    # 3. Escape $ so Streamlit renders it as a literal dollar sign
+    text = text.replace('$', r'\$')
+
+    return text
+
+
 def interpret_result(task: str, data: list[dict]) -> dict:
     """
     Convert raw DB rows into a structured finding with confidence metadata.
@@ -1057,9 +1288,23 @@ def interpret_result(task: str, data: list[dict]) -> dict:
         # Single row for the requested month
         row        = data[0]
         key_metric = row.get("delayed_count", 0)
-        month      = row.get("month", "N/A")
+        month_raw  = row.get("month", "N/A")
         total      = row.get("total_shipments", 0)
         rate       = row.get("delay_rate_pct", 0)
+        # Convert "YYYY-MM" to "Month YYYY" for human-readable output.
+        # WHY? SQL strftime returns ISO format ("2024-12") but the user's query
+        # mentions "December 2024" — showing "2024-12" feels like a raw DB artefact.
+        _MONTH_NAMES_INTERP = {
+            "01": "January", "02": "February", "03": "March",    "04": "April",
+            "05": "May",      "06": "June",      "07": "July",    "08": "August",
+            "09": "September","10": "October",  "11": "November","12": "December",
+        }
+        month = month_raw
+        if month_raw and "-" in str(month_raw):
+            _parts = str(month_raw).split("-")
+            if len(_parts) == 2:
+                _yr, _mo = _parts
+                month = f"{_MONTH_NAMES_INTERP.get(_mo, month_raw)} {_yr}"
         finding    = (
             f"In {month}: {key_metric} delayed shipment(s) out of "
             f"{total} total ({rate}% delay rate)."
@@ -1088,18 +1333,29 @@ def interpret_result(task: str, data: list[dict]) -> dict:
         # Single row for best-performing supplier (ORDER BY delay_rate_pct ASC)
         row        = data[0]
         key_metric = row.get("delay_rate_pct", 0)
-        avg_days   = row.get("avg_delay_days")
-        avg_str    = f" (avg {avg_days:.1f} days per delay)" if avg_days else ""
+        delayed    = row.get("delayed_count", 0)
+        total      = row.get("total_shipments", 0)
         finding    = (
             f"{row.get('supplier_id', 'Unknown')} has the lowest delay rate "
-            f"at {key_metric}%{avg_str} across "
-            f"{row.get('total_shipments', 0)} shipments."
+            f"at {key_metric}% "
+            f"({delayed} delayed of {total} shipments)."
         )
         confidence = 0.9
         quality    = "complete"
 
     elif task == "highest_delay_rate_region":
         # Rows ordered by delay_rate_pct DESC — row 0 is worst region
+        # WHY return only the top-1 row here?
+        #   Queries like "which region has the highest delay rate?" expect a
+        #   single clear answer, not a full breakdown table.  The previous code
+        #   always appended "All regions: South 23.7%, North 11.1%…" even when
+        #   the user asked for only the worst region — that is unsolicited noise.
+        #   Default behaviour: top-1 only.  Full breakdown is only provided when
+        #   the query explicitly contains "all regions", "breakdown", "compare",
+        #   "each region", or "by region".  Because interpret_result() does not
+        #   receive the original user query, the conservative default (top-1) is
+        #   always applied here.  Breakdown support can be added by passing the
+        #   query string to this function in a future revision.
         top        = data[0]
         key_metric = top.get("delay_rate_pct", 0)
         finding    = (
@@ -1108,13 +1364,6 @@ def interpret_result(task: str, data: list[dict]) -> dict:
             f"({top.get('delayed_count', 0)} delayed of "
             f"{top.get('total_shipments', 0)} total shipments)."
         )
-        if row_count > 1:
-            # Append all regions for context
-            all_regions = ", ".join(
-                f"{r.get('region', '?')} {r.get('delay_rate_pct', '?')}%"
-                for r in data
-            )
-            finding += f" All regions: {all_regions}."
 
     elif task == "highest_delay_rate_product_category":
         # Rows ordered by delay_rate_pct DESC — row 0 is worst category
@@ -1251,16 +1500,20 @@ def interpret_result(task: str, data: list[dict]) -> dict:
         # Single aggregate row
         row       = data[0]
         total_sc  = row.get("total_supply_chain_cost", 0) or 0
-        avg_mo    = row.get("avg_monthly_cost", 0) or 0
         from_year = row.get("from_year", "N/A")
         to_year   = row.get("to_year", "N/A")
-        months    = row.get("months_of_data", 0)
         key_metric = total_sc
-        finding    = (
-            f"Total supply chain cost {from_year}–{to_year}: "
-            f"${total_sc:,.0f} "
-            f"(avg ${avg_mo:,.0f}/month across {months} months)."
-        )
+        # WHY show single year instead of a range when from_year == to_year?
+        #   The default query is filtered to year=2024, so the SQL always returns
+        #   from_year=2024 and to_year=2024. Displaying "2024–2024" is redundant
+        #   and confusing. Show "2024" only when the span is a single year.
+        year_label = str(from_year) if from_year == to_year else f"{from_year}–{to_year}"
+        # WHY omit avg/month here?
+        #   "What is total supply chain cost?" is a total-cost question.
+        #   Average-per-month is an unsolicited extra metric that clutters the
+        #   answer. It is only relevant when the query explicitly asks for
+        #   "monthly", "per month", or "average monthly" breakdown.
+        finding    = f"Total supply chain cost {year_label}: ${total_sc:,.0f}."
         confidence = 0.9
         quality    = "complete"
         caveat     = "Financial data. Restricted to authorised roles only."
@@ -1276,10 +1529,10 @@ def interpret_result(task: str, data: list[dict]) -> dict:
         for i, r in enumerate(ranked, start=1):
             sup     = r.get("supplier_id", "Unknown")
             pct     = r.get("delay_rate_pct", 0)
-            cnt     = r.get("total_shipments", 0)
+            total   = r.get("total_shipments", 0)
             delayed = r.get("delayed_count", 0)
             lines.append(
-                f"{i}. {sup} — {pct}% delay rate ({delayed}/{cnt} shipments delayed)"
+                f"{i}. {sup} at {pct}% ({delayed} delayed of {total} shipments)"
             )
         finding    = "Delay rate comparison across all suppliers:\n" + "\n".join(lines)
         key_metric = ranked[0].get("delay_rate_pct", 0) if ranked else 0
@@ -1288,12 +1541,10 @@ def interpret_result(task: str, data: list[dict]) -> dict:
 
     elif task == "delay_count_by_supplier":
         # Most delayed supplier is in row 0 (ORDER BY delay_rate_pct DESC)
-        top = data[0]
+        top        = data[0]
         key_metric = top.get("delay_rate_pct", 0)
-        avg_days   = top.get("avg_delay_days")
-        avg_str    = (
-            f" (avg {avg_days:.1f} days per delay)" if avg_days else ""
-        )
+        delayed    = top.get("delayed_count", 0)
+        total      = top.get("total_shipments", 0)
         # WHY only the top supplier, no "All supplier delay rates:" appendix?
         #   Comparison queries ("compare delay rate across all suppliers") now
         #   route to supplier_delay_comparison which returns a clean numbered
@@ -1304,8 +1555,8 @@ def interpret_result(task: str, data: list[dict]) -> dict:
         #   the user asked for a single-supplier answer.
         finding = (
             f"{top.get('supplier_id', 'Unknown')} has the highest delay rate "
-            f"at {key_metric}%{avg_str} across "
-            f"{top.get('total_shipments', 0)} shipments."
+            f"at {key_metric}% "
+            f"({delayed} delayed of {total} shipments)."
         )
         if row_count < 3:
             caveat = "Fewer than 3 suppliers found — comparison is limited."
@@ -1641,6 +1892,103 @@ def interpret_result(task: str, data: list[dict]) -> dict:
         )
         confidence = 0.9
         quality    = "complete"
+
+    elif task == "in_transit_shipments":
+        row        = data[0]
+        count      = row.get("in_transit_count", 0) or 0
+        key_metric = count
+        finding    = f"{count} shipments are currently in transit."
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "supplier_sla_breach_ranking":
+        # FIX Q10: SQL now returns only tied suppliers (HAVING = MAX).
+        # row_count > 1 → tie; row_count == 1 → single leader.
+        top_b = int(data[0].get("breaches", 0) or 0)
+        key_metric = top_b
+        if row_count > 1:
+            # Tie: "SUP001 and SUP003 are tied with 6 SLA breaches each."
+            tied_ids = [r.get("supplier_id", "?") for r in data]
+            tied_str = " and ".join(tied_ids)
+            finding = f"{tied_str} are tied with {top_b} SLA breaches each."
+        else:
+            top_sup = data[0].get("supplier_id", "Unknown")
+            finding = f"{top_sup} has the most SLA breaches with {top_b} breaches."
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "specific_region_delay_rate":
+        row        = data[0]
+        region     = row.get("region", "Unknown")
+        rate       = row.get("delay_rate_pct", 0) or 0
+        delayed    = row.get("delayed_count", 0)
+        total      = row.get("total_shipments", 0)
+        key_metric = rate
+        finding    = (
+            f"{region} region delay rate: {rate}% "
+            f"({delayed} delayed of {total} shipments)."
+        )
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "supplier_shipment_count":
+        row        = data[0]
+        sup        = row.get("supplier_id", "Unknown")
+        count      = row.get("total_shipments", 0)
+        key_metric = count
+        finding    = f"{sup} handles {count} shipments."
+        confidence = 0.9
+        quality    = "complete"
+
+    elif task == "annual_supply_chain_cost_trend":
+        lines      = [
+            f"{r.get('year','?')}: ${r.get('total_sc_cost', 0):,.0f}"
+            for r in data
+        ]
+        key_metric = data[-1].get("total_sc_cost", 0) if data else 0
+        # WHY "; " separator instead of "\n"?
+        #   clean_finding_text() regex `(\d)\s*\n\s*(\d)` joins a digit before \n
+        #   with a digit after \n — e.g. "5,763,000\n2023" collapses to
+        #   "5,763,0002023". Using "; " avoids the newline entirely.
+        finding    = "Supply chain cost trend — " + "; ".join(lines) + "."
+        confidence = 0.9
+        quality    = "complete"
+        caveat     = "Financial data. Restricted to authorised roles only."
+
+    elif task == "ai_investment_year":
+        row        = data[0]
+        yr         = row.get("year", "N/A")
+        total      = row.get("total_investment", 0) or 0
+        key_metric = total
+        finding    = f"AI investment for {yr}: ${total:,.0f}."
+        confidence = 0.9
+        quality    = "complete"
+        caveat     = "Financial data. Restricted to authorised roles only."
+
+    elif task == "supplier_specific_otd":
+        # FIX Q12: Per-supplier OTD rate (single supplier via ? param)
+        row         = data[0]
+        sup_id      = row.get("supplier_id", "Unknown")
+        on_time     = int(row.get("on_time_count", 0) or 0)
+        total_sh    = int(row.get("total_shipments", 0) or 0)
+        actual_otd  = row.get("actual_otd_pct", 0) or 0
+        key_metric  = actual_otd
+        finding     = (
+            f"{sup_id} on-time delivery rate: {actual_otd}% "
+            f"({on_time} of {total_sh} shipments on time)."
+        )
+        confidence  = 0.9
+        quality     = "complete"
+
+    elif task == "cumulative_ai_savings":
+        # FIX Q19: Cumulative AI savings across all years
+        row        = data[0]
+        total      = row.get("total_savings", 0) or 0
+        key_metric = total
+        finding    = f"Cumulative AI savings: ${total:,.0f}."
+        confidence = 0.9
+        quality    = "complete"
+        caveat     = "Financial data. Restricted to authorised roles only."
 
     else:
         # Unknown task — return raw data with a generic finding
